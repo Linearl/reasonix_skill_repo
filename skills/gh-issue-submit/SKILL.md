@@ -66,6 +66,12 @@ gh api "search/issues?q=repo:<owner>/<repo>+is:issue+in:title+<关键词>" --jq 
      ```
      向用户说明这是 gh CLI 官方 OAuth App 的授权页，点 Authorize 即可，不会暴露令牌值；
   4. 授权完成后再继续提交。目标仓库是**用户自己拥有**时，fine-grained PAT 即可，无需 OAuth。
+- **若用户不希望提供 OAuth 令牌（拒绝授权 / 不想动凭据）→ 回退到 computer use 浏览器自动化**（利用浏览器已有登录态，网页会话天然有提 issue 能力）：
+  1. computer-use 打开 `https://github.com/<owner>/<repo>/issues/new/choose`（先确认浏览器已登录目标账号）；
+  2. 选对应模板（如 `feature_request.yml`），填标题与正文后提交；
+  3. 长正文先写工作区临时文件，经剪贴板（`Get-Content -Raw -Encoding UTF8 <file> | Set-Clipboard`）后 `Ctrl+V` 粘贴，避免长文本逐字输入不稳；
+  4. 提交后从页面 URL 提取 issue 编号，`gh issue view <编号>`（或网页）验证状态；
+  5. 注意：键盘注入被拒时先点击窗口激活（窗口焦点问题），UIA 捕获不到表单控件时用坐标点击。
 
 **GITHUB_TOKEN / GH_TOKEN 环境变量会覆盖 gh 的所有账号管理！**
 
