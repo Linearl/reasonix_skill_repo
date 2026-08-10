@@ -53,7 +53,12 @@ gh api "search/issues?q=repo:<owner>/<repo>+is:issue+in:title+<关键词>" --jq 
 
 ### 4. 权限检查与账号切换（⚠️ 最容易踩坑）
 
-**GITHUB_TOKEN 环境变量会覆盖 gh 的所有账号管理！**
+**凭据来源（先搞清楚手上有哪两种凭据）**：
+- `github_pat_...`（fine-grained PAT）：你自己在 GitHub 设置的，存于环境变量 GITHUB_TOKEN/GH_TOKEN；写权限**仅限自己拥有的仓库**（All repositories 不含第三方仓库）——即使勾了 Issues: write，对第三方仓库提交也报 403，**改 token 权限无法解决**。
+- `gho_...`（OAuth user token）：`gh auth login` 走浏览器 OAuth 流程时生成，存入系统凭据管理器（Windows Credential Manager，即 gh 的 keyring）；scopes 默认含 `repo`，权限等同于网页会话——**可以对任意公开仓库提 issue**（无需 collaborator）。
+- 判定：`gh auth status` 看 active 凭据前缀与 scope。
+
+**GITHUB_TOKEN / GH_TOKEN 环境变量会覆盖 gh 的所有账号管理！**
 
 ```bash
 gh auth status
@@ -65,12 +70,12 @@ gh auth status
   unset GITHUB_TOKEN
   gh auth switch --user <用户名>
   ```
-- 注意：`unset GITHUB_TOKEN` 只在当前 shell 命令内生效，每条命令都要带上（如 `unset GITHUB_TOKEN; gh issue create ...`），或者用 `env -u GITHUB_TOKEN gh ...`。
+- 注意：环境变量名有 `GITHUB_TOKEN` 和 `GH_TOKEN` 两个，都要清。`unset` 只在当前 shell 命令内生效，每条命令都要带上（如 `unset GITHUB_TOKEN GH_TOKEN; gh issue create ...`），或者用 `env -u GITHUB_TOKEN -u GH_TOKEN gh ...`。
 
 ### 5. 提交
 
 ```bash
-unset GITHUB_TOKEN
+unset GITHUB_TOKEN GH_TOKEN
 gh issue create --repo <owner>/<repo> \
   --title "[Feature]: <一句话标题>" \
   --body-file <正文文件路径>
@@ -81,7 +86,7 @@ gh issue create --repo <owner>/<repo> \
 ### 6. 验证
 
 ```bash
-unset GITHUB_TOKEN
+unset GITHUB_TOKEN GH_TOKEN
 gh issue view <编号> --repo <owner>/<repo> --json number,title,state,url --jq '{number,title,state,url}'
 ```
 - 确认 state=OPEN、作者、标题正确。把 URL 汇报给用户。
