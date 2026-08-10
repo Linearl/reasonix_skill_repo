@@ -34,10 +34,6 @@ Books contain crystallized expertise: frameworks, principles, and techniques tha
 
 **Layer depth appropriately.** Simple books → simple skills. Complex books with 10+ frameworks → skills with reference files and on-demand chapters.
 
-**Every generated skill also preserves the full source text.** The extracted text of the book is kept alongside the structured skill so readers can always verify a claim against the original, deep-dive into any passage, or re-derive their own structure. The full text lives in `source/` and the structured files link back to it.
-
-**Generated skills use Obsidian wikilinks.** All internal cross-references between the generated files (chapter index, topic index, glossary, patterns, cheatsheet, and the source text) use `[[wikilinks]]` so the skill folder can be opened as an Obsidian vault and every document stays connected. See the [obsidian-markdown](https://github.com/kepano/obsidian-skills) skill for the exact syntax (wikilinks, embeds, callouts).
-
 ---
 
 ## Modes of Operation
@@ -46,8 +42,8 @@ Four paths available. Route based on what the user asks:
 
 ### 1. Full Conversion (Default)
 **Trigger:** User provides one or more document/directory/glob paths without special instructions
-**Action:** Run all steps below (Steps 0–10)
-**Output:** Complete skill with SKILL.md, chapters/, source/, glossary, patterns, cheatsheet — all internally wikilinked
+**Action:** Run all steps below (Steps 0–9)
+**Output:** Complete skill with SKILL.md, chapters/, glossary, patterns, cheatsheet
 
 ### 2. Analyze Only
 **Trigger:** User says "analyze", "just extract", or "I want to review before generating"
@@ -135,8 +131,6 @@ Run the extraction script, passing the input paths:
 ```bash
 SCRIPT_PATH=""
 for candidate in \
-  "$APPDATA/reasonix/skills/book-to-skill/scripts/extract.py" \
-  "$HOME/.reasonix/skills/book-to-skill/scripts/extract.py" \
   "$HOME/.copilot/skills/book-to-skill/scripts/extract.py" \
   "$HOME/.agents/skills/book-to-skill/scripts/extract.py" \
   "$HOME/.claude/skills/book-to-skill/scripts/extract.py" \
@@ -175,8 +169,6 @@ This creates:
 
 Read `<tempdir>/book_skill_work/metadata.json` to inspect the results.
 
-> ⚠️ **Do NOT delete this file during the run.** `full_text.txt` is the raw material for both the analysis (Steps 3–8) and the preserved source archive (Step 6.5). If the extraction was an OCR pass (scanned PDFs), `full_text.txt` is the only surviving full text — losing it means the skill will never contain the original book.
-
 ---
 
 ## Step 2.5 — Pre-flight cost estimate
@@ -193,9 +185,9 @@ Read `<tempdir>/book_skill_work/metadata.json` and present the user with an esti
    Output (skill files generated/updated):  ~<N>K tokens
    Total:                           ~<N>K tokens
 
-   Reference prices (as of 2025):
-   Claude Sonnet 4.5 → ~$<X> USD
-   Claude Haiku 4.5  → ~$<X> USD
+   Cost: multiply the token counts above by your model's current
+   input/output per-1M-token rates (prices and model names change often —
+   do not hardcode them; quote today's rate and label it as an estimate).
 
    ⏱  Estimated time: ~<N> minutes
 
@@ -209,7 +201,7 @@ Read `<tempdir>/book_skill_work/metadata.json` and present the user with an esti
 - Input tokens ≈ `estimated_tokens` from metadata × 1.3 (prompts overhead per chapter pass)
 - Output tokens ≈ chapters × per-chapter budget + 4,000 (SKILL.md) + 4,500 (glossary + patterns + cheatsheet)
   - Per-chapter budget midpoint by `BOOK_TYPE` (DEPTH is decided later in Step 4 and can raise it): `text` ≈ 1,000, `technical` ≈ 1,800. If the user has already indicated reference-only vs deep study, use the matching row of the Step 7 matrix.
-- Price: Sonnet input=$3/MTok output=$15/MTok — Haiku input=$0.80/MTok output=$4/MTok
+- Cost: report the token counts and multiply by the user's current per-1M-token input/output rates. Do NOT hardcode dollar figures — model names and prices change; if you show one, label it an estimate and date it.
 
 Wait for the user to confirm before proceeding. If they say "analyze only", switch to Mode 2.
 
@@ -241,8 +233,6 @@ grep -c -i "westrum\|dora" "$FULL_TEXT_PATH"
 Use this approach for Step 3 (structure analysis), Step 7 (per-chapter summaries), and Step 8 (glossary / patterns extraction). On books under 50k tokens, a single `Read` is fine.
 
 Why this matters: a 200-page book is ~75k tokens. Re-reading it once per chapter (28 passes) costs ~2M input tokens; using grep + sed to pull only relevant slices keeps generation cost proportional to the output, not the source.
-
-**Note:** the full text also becomes the skill's `source/` archive (Step 6.5). Even when you only probe slices during analysis, the complete file is copied verbatim into the skill at the end.
 
 ---
 
@@ -337,52 +327,8 @@ If the user selects **Update / Fold-in**, proceed immediately to the **Update / 
 ## Step 6 — Create skill directory structure
 
 ```bash
-mkdir -p "$SKILLS_HOME/<skill_name>/chapters" "$SKILLS_HOME/<skill_name>/source"
+mkdir -p "$SKILLS_HOME/<skill_name>/chapters"
 ```
-
-The `source/` folder holds the preserved full text of the book (see Step 6.5).
-
----
-
-## Step 6.5 — Preserve the full source text
-
-Copy the extracted full text into the skill **before generating any structured files**, so every chapter can reference it:
-
-```bash
-cp "$BOOK_SKILL_WORKDIR/full_text.txt" "$SKILLS_HOME/<skill_name>/source/full-text.md"
-```
-
-Then normalize the copy so it opens cleanly in Obsidian and links well:
-
-1. **Ensure frontmatter + title.** Prepend if missing:
-   ```markdown
-   ---
-   title: <Full Title> — Full Text
-   tags:
-     - source
-   aliases:
-     - <Full Title>
-   ---
-
-   # <Full Title> — 全文 / Full Text
-   ```
-2. **Make page markers heading-anchorable.** For scanned/OCR books, page markers look like `--- PAGE 12 ---`. Convert them to `## 第12页` (or `## Page 12` for English books) so `[[full-text#第12页]]` anchor links work. Keep chapter/numbered headings as-is so the book's own structure stays navigable.
-3. **Keep the text verbatim** — normalization changes markers and frontmatter only, never the body text.
-
-### How the structured files link to the source
-
-Every chapter, glossary term, and pattern that derives from a specific passage should link back to the source text. Three link forms:
-
-- **Whole book**: `[[full-text]]` — anchors from anywhere in the skill
-- **Page/heading anchor**: `[[full-text#第12页]]` or `[[full-text#Page 12]]` — for OCR'd books
-- **Chapter anchor**: `[[full-text#Chapter 5]]` — when the extractor preserved the book's own headings
-
-Concretely:
-- Each chapter's **Worked Example** or **Key Takeaways** that quotes or reconstructs a passage adds a source link at the end of the section: `📖 原文见 [[full-text#第27页]]`
-- The **glossary** appends a source link to any term defined from a specific passage: `(源文 [[full-text#第55页]])`
-- If the source is a **single page** (e.g. an article), add `[[full-text]]` once in SKILL.md's Core Frameworks instead of per-passage links.
-
-This is what turns the skill folder into a two-way navigable vault: summaries point to evidence, and the evidence is always one click away.
 
 ---
 
@@ -463,23 +409,9 @@ Create `$SKILLS_HOME/<skill_name>/chapters/ch<NN>-<slug>.md` using the structure
 (3–7 takeaways a practitioner must remember)
 
 ## Connects To
-- **[[ch<NN>-<slug>]]**: <why this chapter relates>
-- **[[glossary]]**: <term or concept this chapter uses>
-- **[[patterns#<Pattern Name>]]**: <pattern this chapter's framework maps to>
-- **[[cheatsheet]]**: <decision rule or threshold this chapter feeds>
-- **[[full-text#<第N页 or Book Heading>]]**: <original passage this chapter's claims derive from>
+- **Ch N**: <why this chapter relates>
+- **<Concept>**: <external concept or standard it connects with>
 ```
-
-### Wikilink rules for chapters (per the obsidian-markdown skill)
-
-Use Obsidian wikilinks (`[[...]]`) for **all** internal cross-references — never relative markdown paths. Plain wikilinks with no extension (`[[ch05]]`, not `[[ch05.md]]`) let Obsidian track renames automatically and make the skill folder openable as a vault.
-
-1. **Chapter-to-chapter**: `[[ch05-<slug>]]` — link sibling chapters this one builds on or contrasts with.
-2. **Chapter-to-source**: `[[full-text#第12页]]` — anchor to the exact page (or book heading) a claim derives from. Place after the **Worked Example** or at the end of **Key Takeaways**: `📖 原文见 [[full-text#第27页]]`. For books where the extractor kept native headings, use `[[full-text#Chapter 5]]` instead.
-3. **Chapter-to-glossary**: `[[glossary]]` — link the first occurrence of any term indexed in the glossary.
-4. **Chapter-to-patterns**: `[[patterns#<Pattern Name>]]` — heading anchor; the `#` text must match the pattern's heading exactly (e.g. `[[patterns#达利欧学习循环]]`).
-5. **Chapter-to-cheatsheet**: `[[cheatsheet]]` — when a decision rule or threshold from this chapter appears there.
-6. Use display-text form (`[[full-text#第12页|原文第12页]]`) when the bare link would read awkwardly mid-sentence.
 
 ---
 
@@ -488,15 +420,13 @@ Use Obsidian wikilinks (`[[...]]`) for **all** internal cross-references — nev
 ### glossary.md
 Create `$SKILLS_HOME/<skill_name>/glossary.md`:
 - Every significant term from the book, alphabetically sorted
-- Format: `**Term** — definition ([[ch<NN>-<slug>]])` — link the chapter(s) that define the term
-- Add a source anchor where the definition comes from a specific passage: `(源文 [[full-text#第55页]])`
+- Format: `**Term** — definition (Ch N)`
 - Max 1,500 tokens
 
 ### patterns.md
 Create `$SKILLS_HOME/<skill_name>/patterns.md`:
 - All concrete techniques, design patterns, algorithms from the book
 - Format: `## Pattern Name\n**When to use**: ...\n**How**: ...\n**Trade-offs**: ...`
-- Link the originating chapter at the end of each pattern: `📖 [[ch<NN>-<slug>]]`
 - Max 2,000 tokens
 
 ### cheatsheet.md
@@ -514,7 +444,6 @@ Prioritize, in order:
 Avoid: bare term→definition rows (that's the glossary), and prose paragraphs (that's the chapters). Every line should help the reader *decide* something.
 
 - Format mostly as compact tables and decision rules; the content you'd want on a single printed page kept beside you while working.
-- Link each section's originating chapter with wikilinks: `📖 [[ch<NN>-<slug>]]`
 - Max 1,200 tokens.
 
 ---
@@ -543,7 +472,6 @@ description: "Knowledge base from \"<Full Title>\" by <Author(s)>. Use when appl
 - **With a topic** — ask about `replication`, `pricing`, or another indexed topic; I find and read the relevant chapter
 - **With chapter** — ask for `ch05`; I load that specific chapter
 - **Browse** — ask "what chapters do you have?" to see the full index
-- **Full text** — the complete book text is preserved in [[full-text]]; ask "show me the original passage on <topic>" and I quote from it
 
 When you ask about a topic not covered in Core Frameworks below, I will read
 the relevant chapter file before answering.
@@ -570,15 +498,14 @@ the relevant chapter file before answering.
 ## Topic Index
 
 <!-- Alphabetical. Major terms/frameworks → chapter(s) that cover them. -->
-- **<Term>** → [[ch<N>-<slug>]]
-- **<Term>** → [[ch<N>-<slug>]], [[ch<N>-<slug>]]
+- **<Term>** → ch<N>[, ch<N>]
+- **<Term>** → ch<N>
 
 ## Supporting Files
 
-- [[glossary]] — all key terms with definitions
-- [[patterns]] — all techniques and design patterns
-- [[cheatsheet]] — quick reference tables and decision guides
-- [[full-text]] — complete source text of the book (source/full-text.md)
+- [glossary.md](glossary.md) — all key terms with definitions
+- [patterns.md](patterns.md) — all techniques and design patterns
+- [cheatsheet.md](cheatsheet.md) — quick reference tables and decision guides
 
 ---
 
@@ -591,9 +518,20 @@ or ask the agent directly.
 
 ---
 
-## Step 10 — Cleanup and report
+## Step 9.5 — Scan the generated skill
 
-The temp workdir is deleted — **the preserved copy in `$SKILLS_HOME/<skill_name>/source/full-text.md` (Step 6.5) is the durable archive and must NOT be deleted.**
+Before reporting success, loading the skill in another session, or publishing it, run the advisory security scan:
+
+```bash
+SKILL_CONVERTER_ROOT="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd)"
+"$PYTHON_BIN" "$SKILL_CONVERTER_ROOT/tools/scan_generated_skill.py" "$SKILLS_HOME/<skill_name>"
+```
+
+If the scanner exits non-zero, stop and ask a human to review its file/line findings. Do not silently rewrite the generated files, and do not load or publish the skill until the findings are resolved or explicitly accepted.
+
+---
+
+## Step 10 — Cleanup and report
 
 ```bash
 PYTHON_BIN="${PYTHON_BIN:-python3}"
@@ -624,16 +562,11 @@ Then report to the user:
 Files generated:
   SKILL.md         — core frameworks + index   (~X tokens)
   chapters/        — <N> chapter summaries     (~X tokens each, ~X total)
-  source/full-text.md — complete book text     (~X tokens, kept for verification)
   glossary.md      — key terms                 (~X tokens)
   patterns.md      — techniques & patterns     (~X tokens)
   cheatsheet.md    — quick reference           (~X tokens)
   ─────────────────────────────────────────────────────
   Total skill size: ~X tokens (loaded on-demand, not all at once)
-
-🔗 All internal references use Obsidian wikilinks — open the skill folder
-   as an Obsidian vault to browse the graph, or ask the agent for any
-   passage with "show me the original text".
 
 💡 Tip: check your agent's session cost/usage command to see actual token usage.
 
@@ -641,7 +574,6 @@ Usage:
   Ask for <skill_name>                  → load core frameworks
   Ask <skill_name> about <topic>        → find and explain a topic
   Ask <skill_name> for ch<N>            → dive into a specific chapter
-  Ask <skill_name> for the original <passage> → quote from [[full-text]]
 
 Reload (if your agent doesn't auto-detect new skills):
   GitHub Copilot CLI:  /skills reload
@@ -676,12 +608,11 @@ For each new or revised chapter:
 - Write/update the file in `$SKILLS_HOME/<skill_name>/chapters/`.
 
 ### 4. Merge Supporting Files
-- **Merge source/full-text.md**: Read the existing `$SKILLS_HOME/<skill_name>/source/full-text.md`, then append the newly extracted text with a `## <New Source Title>` heading (or, if the skill had no source yet, copy it via Step 6.5). Keep prior source text intact — the archive accumulates every conversion run.
 - **Merge glossary.md**:
   - Read the existing `$SKILLS_HOME/<skill_name>/glossary.md`.
   - Extract all new terms and definitions from the new content (Step 8 glossary guidelines).
   - Combine and alphabetize the list of existing and new terms.
-  - If a term already exists, append the new chapter/source references to it (e.g. `**Term** — definition ([[ch04-<slug>]], [[ch13-<slug>]]))`.
+  - If a term already exists, append the new chapter/source references to it (e.g. `**Term** — definition (Ch 4, Ch 13)`).
   - Rewrite `$SKILLS_HOME/<skill_name>/glossary.md` with the fully merged, alphabetized list.
 - **Merge patterns.md**:
   - Read existing `$SKILLS_HOME/<skill_name>/patterns.md`.
@@ -691,18 +622,16 @@ For each new or revised chapter:
   - Read existing `$SKILLS_HOME/<skill_name>/cheatsheet.md`.
   - Extract new comparison rules, decision tables, or parameter guides.
   - Integrate them cleanly into the cheatsheet structure.
-- **Wikilink everything**: any new/revised file links to siblings and to the source archive with `[[wikilinks]]` per the Step 7 rules.
 
 ### 5. Re-generate the Master SKILL.md
 Update the master skill file `$SKILLS_HOME/<skill_name>/SKILL.md`:
 - **Metadata**: Increment the chapter count, update the estimated page count, and add the new source names if appropriate. Update the `Generated` date to the current date.
 - **Core Frameworks**: Fold in the most high-impact mental models or principles from the new content (ensuring the overall file remains under 4,000 tokens).
 - **Chapter Index**: Append the new chapters to the index table, linking to the newly created files.
-- **Topic Index**: Merge the new topics alphabetically. If an existing topic is also covered in the new chapters, append the new chapter links to its line (e.g. `- **Topic** → [[ch05-<slug>]], [[ch13-<slug>]]`).
-- **Supporting Files**: ensure [[full-text]] is listed and points at the merged source archive.
+- **Topic Index**: Merge the new topics alphabetically. If an existing topic is also covered in the new chapters, append the new chapter links to its line (e.g. `- **Topic** → ch05, ch13`).
 
-### 6. Cleanup and Proceed to Step 10
-Once the files are successfully written and merged, skip to **Step 10** to perform cleanup and print a custom update report summarizing the newly added chapters, merged glossary terms, and updated indices.
+### 6. Scan, Cleanup, and Report
+Once the files are successfully written and merged, run **Step 9.5**, then proceed to **Step 10** to perform cleanup and print a custom update report summarizing the newly added chapters, merged glossary terms, and updated indices.
 
 ---
 
@@ -714,7 +643,5 @@ Once the files are successfully written and merged, skip to **Step 10** to perfo
 4. **Practitioner voice** — write "Use X when Y", not "The book explains X"
 5. **Front-load SKILL.md** — compaction keeps the first 5,000 tokens; most important content comes first
 6. **Chapter files are on-demand** — they don't count against skill budget until loaded
-7. **Never copy raw book text into summaries** — always synthesize, summarize, extract signal; the verbatim text belongs in `source/full-text.md` only
+7. **Never copy raw book text** — always synthesize, summarize, extract signal
 8. **Topic index is critical** — it's how the agent navigates to the right chapter file
-9. **Keep the full text** — `source/full-text.md` is part of every generated skill; never strip it during cleanup or updates
-10. **Wikilink everything internal** — chapter↔chapter, chapter↔source, chapter↔glossary/patterns/cheatsheet, all via `[[wikilinks]]` per the obsidian-markdown skill

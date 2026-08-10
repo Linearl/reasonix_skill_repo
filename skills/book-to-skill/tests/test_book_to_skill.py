@@ -34,6 +34,7 @@ from book_to_skill.utils import (
     main,
 )
 from book_to_skill.config import SUPPORTED_EXTENSIONS
+from book_to_skill.parsers import pdf as pdf_parser
 from book_to_skill.parsers.text import read_text_file
 from book_to_skill.parsers.docx import extract_docx_with_zipfile
 from book_to_skill.parsers.rtf import strip_rtf_fallback
@@ -365,6 +366,49 @@ class TestBatchResilience:
         meta = json.loads(out_meta.read_text(encoding="utf-8"))
         assert meta["total_sources"] == 1
 
+    @pytest.mark.parametrize(
+        "reported_source",
+        ["/x/sample.md", "/deep/" + ("nested/" * 12) + "sample.md"],
+    )
+    def test_source_banner_does_not_change_structural_chapter_count(
+        self, tmp_path, monkeypatch, reported_source
+    ):
+        """The generated SOURCE banner must not become a phantom setext heading."""
+        source = _make_md_file(
+            tmp_path / "sample.md",
+            "# The Pragmatic Widget\n\n"
+            "## Foundations\n\nBody.\n\n"
+            "## Design Rules\n\nBody.\n\n"
+            "## Trade-offs\n\nBody.\n\n"
+            "## Operating Model\n\nBody.\n\n"
+            "## Closing\n\nBody.\n",
+        )
+        out_dir = tmp_path / "output"
+        out_text = out_dir / "full_text.txt"
+        out_meta = out_dir / "metadata.json"
+        real_extract = extract_single_file
+
+        def extract_with_reported_source(*args, **kwargs):
+            result = real_extract(*args, **kwargs)
+            result["source_file"] = reported_source
+            return result
+
+        monkeypatch.setattr("sys.argv", ["extract.py", str(source), "--install-missing", "no"])
+        monkeypatch.setattr("book_to_skill.utils.OUTPUT_DIR", out_dir)
+        monkeypatch.setattr("book_to_skill.utils.OUTPUT_TEXT", out_text)
+        monkeypatch.setattr("book_to_skill.utils.OUTPUT_META", out_meta)
+        monkeypatch.setattr("book_to_skill.utils.prepare_dependencies", lambda *a: None)
+        monkeypatch.setattr(
+            "book_to_skill.utils.extract_single_file", extract_with_reported_source
+        )
+
+        main()
+
+        metadata = json.loads(out_meta.read_text(encoding="utf-8"))
+        assert metadata["sources"][0]["chapters_detected"] == 5
+        assert metadata["chapters_detected"] == 5
+        assert "SOURCE: sample.md" in out_text.read_text(encoding="utf-8")
+
     def test_extraction_error_is_not_system_exit(self):
         """ExtractionError should NOT be a subclass of SystemExit."""
         assert not issubclass(ExtractionError, SystemExit)
@@ -546,6 +590,96 @@ class TestDetectStructure:
         text = "Chapter 1 Introduction\nSome text.\nChapter 2 Details\nMore text."
         result = detect_structure(text)
         assert result["chapters_detected"] == 2
+
+    def test_detects_chapter_word_with_roman_numeral(self):
+        """`Chapter I.` — the combination of the word plus a Roman numeral.
+
+        Regression: each half worked alone (`Chapter 1` via _EXPLICIT_CHAPTER,
+        `I. Loomings` via _ROMAN_HEAD) but the combination matched neither, so
+        books using it fell back to no segmentation. Project Gutenberg's
+        `The Art of War` (#132) is one: 13 such headings, 0 detected, while two
+        footnote cross-references (`ch. 71.]`) were picked up instead.
+        """
+        text = "\n".join(
+            "Chapter %s. Section\nBody text here." % r
+            for r in ("I", "II", "III", "IV", "V")
+        )
+        assert detect_structure(text)["chapters_detected"] == 5
+
+    def test_detects_thai_chapters(self):
+        """Thai headings: `บทที่ N` / `ตอนที่ N`, with Thai or Arabic digits."""
+        text = (
+            "บทที่ ๑ ว่าด้วยการวางแผน\nเนื้อหา\n"
+            "บทที่ ๒ ว่าด้วยการรบ\nเนื้อหา\n"
+            "บทที่ 3 ว่าด้วยกลยุทธ์\nเนื้อหา"
+        )
+        assert detect_structure(text)["chapters_detected"] == 3
+
+    def test_thai_episode_headings_and_markdown_prefix(self):
+        text = "## ตอนที่ ๘๖ เรื่องหนึ่ง\nเนื้อหา\n## ตอนที่ ๘๗ เรื่องสอง\nเนื้อหา"
+        assert detect_structure(text)["chapters_detected"] == 2
+
+    def test_thai_prose_is_not_a_chapter_heading(self):
+        """`บทความ` (article) and `ตอนนี้` (now) start with the chapter words
+        but are ordinary prose — they must not be treated as headings."""
+        from book_to_skill.utils import _chapter_number
+
+        assert _chapter_number("บทความนี้ยาวมากและมีรายละเอียดเยอะ") is None
+        assert _chapter_number("ตอนนี้เรามาดูกันว่าเกิดอะไรขึ้น") is None
+
+    # ── Korean chapter headings ────────────────────────────────────────────
+
+    def test_korean_je_n_jang(self):
+        """Korean headings: `제N장` with Arabic digits."""
+        text = (
+            "제1장 총칙\n내용\n"
+            "제2장 근로시간\n내용\n"
+            "제3장 휴식\n내용"
+        )
+        assert detect_structure(text)["chapters_detected"] == 3
+
+    def test_korean_markdown_prefix(self):
+        """`## 제N장` with Markdown heading prefix."""
+        text = "## 제1장 서론\n내용\n## 제2장 본론\n내용"
+        assert detect_structure(text)["chapters_detected"] == 2
+
+    def test_korean_inserted_chapter_suffix(self):
+        """`제6장의2` — inserted-chapter suffix used in Korean statutes."""
+        text = "제6장의2 직장 내 괴롭힘의 금지\n내용\n제7장 보칙\n내용"
+        assert detect_structure(text)["chapters_detected"] == 2
+
+    def test_korean_article_is_not_chapter(self):
+        """`제N조` (article) is not a chapter classifier — deliberately excluded."""
+        from book_to_skill.utils import _chapter_number
+
+        assert _chapter_number("제56조 (연장·야간 및 휴일 근로)") is None
+
+    def test_korean_prose_cross_reference_not_chapter(self):
+        """Prose cross-references with particles are not headings."""
+        from book_to_skill.utils import _chapter_number
+
+        assert _chapter_number("이 장과 제5장에서 정한 근로시간…") is None
+        assert _chapter_number("제5장에서 정한 근로시간에 관한 규정은…") is None
+        assert _chapter_number("제2장의 규정에도 불구하고…") is None
+
+    def test_korean_dedups_toc_and_body(self):
+        """ToC entry and body heading with same number count once."""
+        text = "제1장 총칙\n제2장 근로시간\n## 제1장\n내용\n## 제2장\n내용"
+        assert detect_structure(text)["chapters_detected"] == 2
+
+    def test_korean_other_classifiers(self):
+        """`제N편` (part), `제N절` (section), `제N관` (subsection) are also detected."""
+        text = "제1편 총칙\n내용\n제2장 정의\n내용\n제3절 통칙\n내용"
+        assert detect_structure(text)["chapters_detected"] == 3
+
+
+    def test_roman_footnote_reference_is_not_a_chapter(self):
+        """Scholarly cross-references must stay rejected after the Roman change."""
+        from book_to_skill.utils import _chapter_number
+
+        assert _chapter_number("V. § 19, note.") is None
+        assert _chapter_number("VI. § 21:\u2014") is None
+        assert _chapter_number("Chapter 6 explores the topic in depth") is None
 
     def test_detects_toc(self):
         text = "Table of Contents\n1. Intro\n2. Body"
@@ -811,6 +945,69 @@ class TestDetectStructure:
         # same heading twice (once as ATX, once as setext).
         text = "# Hi\n====\n# Bye\n=====\n"
         assert detect_structure(text)["chapters_detected"] == 2
+
+
+class TestMarkdownPrefixedLatinChapters:
+    """Issue #91 — _chapter_number() must see chapter headings behind a
+    Markdown/AsciiDoc prefix ("## Chapter 1"). Previously the Latin/Thai/Korean
+    matchers anchored on the line start, so --mode technical books (Docling
+    emits headings as Markdown) fell through to the structural fallback and
+    inflated chapters_detected."""
+
+    def test_md_prefixed_latin_chapter_word(self):
+        from book_to_skill.utils import _chapter_number
+
+        assert _chapter_number("## Chapter 1") == 1
+        assert _chapter_number("## CHAPTER 5") == 5
+        assert _chapter_number("## Chapter 1 Interaction Design") == 1
+        assert _chapter_number("## Capítulo 5") == 5
+        assert _chapter_number("## Chapitre 2") == 2
+        assert _chapter_number("## Kapitel 3") == 3
+
+    def test_asciidoc_prefixed_chapter_word(self):
+        from book_to_skill.utils import _chapter_number
+
+        assert _chapter_number("== Chapter 1") == 1
+        assert _chapter_number("=== Chapter 2") == 2
+
+    def test_md_prefixed_roman_numeral(self):
+        from book_to_skill.utils import _chapter_number
+
+        assert _chapter_number("## I. Loomings") == 1
+        assert _chapter_number("## III: The Spouter-Inn") == 3
+
+    def test_issue91_repro_matches_plain_text_count(self):
+        # The exact reproduction from #91: 35 real chapters plus 35 subsection
+        # headings. With the fix, the numeric path wins and the structural
+        # fallback no longer inflates the count to 36.
+        md = "\n".join(f"## Chapter {i}\n## Some Section\nbody\n" for i in range(1, 36))
+        plain = "\n".join(f"Chapter {i}\nbody\n" for i in range(1, 36))
+        assert detect_structure(md)["chapters_detected"] == 35
+        assert detect_structure(plain)["chapters_detected"] == 35
+        # The numeric path also fills the heading sample — an empty sample is a
+        # reliable tell that the structural fallback was used instead.
+        sample = detect_structure(md)["chapter_headings_sample"]
+        assert sample and sample[0] == "## Chapter 1"
+
+    def test_md_prefixed_lowercase_roman_still_works(self):
+        # "## i. introduction" is trusted as a heading (markdown context);
+        # unchanged from before the fix.
+        text = "## i. introduction\nbody\n## ii. methods\nbody\n## iii. results\nbody\n"
+        assert detect_structure(text)["chapters_detected"] == 3
+
+    def test_md_prefixed_non_chapter_headings_still_rejected(self):
+        from book_to_skill.utils import _chapter_number
+
+        assert _chapter_number("## Some Section") is None
+        assert _chapter_number("## 5 Setup") is None
+        assert _chapter_number("## Acknowledgment") is None
+        assert _chapter_number("## 2025 Goals") is None
+
+    def test_md_prefixed_cjk_unchanged(self):
+        # CJK matchers already tolerated the prefix inline; behavior is
+        # byte-for-byte unchanged.
+        assert detect_structure("## 第一讲\n正文\n## 第二讲\n正文\n")["chapters_detected"] == 2
+        assert detect_structure("## 一 · 缘起\n正文\n## 二 · 主体\n正文\n")["chapters_detected"] == 2
 
 
 class TestTextExtraction:
@@ -1284,3 +1481,210 @@ class TestTextEncodingDetection:
     def test_empty_file_returns_empty_string(self, tmp_path):
         # An empty file decodes to "" (not None, which is reserved for read errors).
         assert read_text_file(self._write(tmp_path, b"")) == ""
+
+
+class TestPdftotextEncoding:
+    """pdftotext output (UTF-8) is decoded as UTF-8, not the locale encoding."""
+
+    def test_pdftotext_decodes_as_utf8(self, monkeypatch):
+        captured = {}
+
+        class _Result:
+            returncode = 0
+            stdout = "Café — naïve"
+
+        monkeypatch.setattr(pdf_parser.shutil, "which", lambda name: "/usr/bin/pdftotext")
+
+        def fake_run(cmd, **kwargs):
+            captured.update(kwargs)
+            return _Result()
+
+        monkeypatch.setattr(pdf_parser.subprocess, "run", fake_run)
+
+        assert pdf_parser.extract_with_pdftotext("x.pdf") == "Café — naïve"
+        assert captured.get("encoding") == "utf-8"
+        assert captured.get("errors") == "replace"
+
+
+class TestPdftotextCleanup:
+    """clean_pdftotext strips repeated headers/footers/page numbers and dehyphenates."""
+
+    def _pages(self, *pages):
+        return "\f".join(pages)
+
+    def test_repeated_header_and_edge_page_numbers_removed(self):
+        raw = self._pages(
+            *(f"BOOK TITLE\nReal content on page {n}.\n{n}" for n in (1, 2, 3))
+        )
+        out = pdf_parser.clean_pdftotext(raw)
+        assert "BOOK TITLE" not in out
+        assert not any(ln.strip() in {"1", "2", "3"} for ln in out.splitlines())
+        assert "Real content on page 1." in out
+
+    def test_hyphenated_wrap_is_rejoined(self):
+        raw = self._pages(*(f"H\nabout informa-\ntion here\n{n}" for n in (1, 2, 3)))
+        out = pdf_parser.clean_pdftotext(raw)
+        assert "information" in out
+        assert "informa-" not in out
+
+    def test_token_count_drops(self):
+        raw = self._pages(*(f"RUNNING HEAD\nbody text page {n}\n{n}" for n in (1, 2, 3)))
+        out = pdf_parser.clean_pdftotext(raw)
+        assert len(out.split()) < len(raw.split())
+
+    def test_mid_page_bare_number_is_kept(self):
+        # A bare number that is NOT at a page edge must survive.
+        raw = self._pages(*(f"HDR\nthe answer is 42\ntrailing\n{n}" for n in (1, 2, 3)))
+        out = pdf_parser.clean_pdftotext(raw)
+        assert "42" in out
+        assert "HDR" not in out
+
+    def test_single_page_keeps_content(self):
+        # < 3 pages: no header/footer removal, only dehyphenation.
+        out = pdf_parser.clean_pdftotext("Title\nword-\nwrap\n1")
+        assert "wordwrap" in out
+        assert "Title" in out
+        assert "1" in out
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Fix #4 — Lowercase Roman numeral chapter detection
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestLowercaseRomanNumerals:
+    """Verify that lowercase Roman numeral headings are detected."""
+
+    def test_lowercase_roman_requires_heading_context(self):
+        """Bare 'i: Loomings' at line start is NOT detected (FP guard)."""
+        assert detect_structure("i: Loomings\nbody\nii: The Carpet-Bag\nbody\n")["chapters_detected"] == 0
+
+    def test_lowercase_roman_with_markdown_heading(self):
+        """'## i. introduction' as a markdown heading is detected."""
+        text = "## i. introduction\nbody\n## ii. methods\nbody\n## iii. results\nbody\n"
+        assert detect_structure(text)["chapters_detected"] == 3
+
+    def test_bare_lowercase_not_confused_with_prose(self):
+        """Lowercase roman 'i' alone or 'v.' page dividers are not chapters."""
+        from book_to_skill.utils import _chapter_number
+        assert _chapter_number("i") is None
+        assert _chapter_number("v.") is None
+        assert _chapter_number("i.") is None
+        assert _chapter_number("vi: the vim editor") is None
+        assert _chapter_number("cli: a reference") is None
+        assert _chapter_number("civ: a history") is None
+
+    def test_uppercase_roman_still_works(self):
+        """Existing uppercase Roman detection is unaffected."""
+        assert detect_structure("I: Loomings\nbody\nII: Carpet-Bag\nbody\nIII: Spouter-Inn\nbody\n")["chapters_detected"] == 3
+
+    def test_lowercase_roman_via_explicit_chapter_word(self):
+        """'Chapter i.' with lowercase roman via _EXPLICIT_CHAPTER."""
+        text = "Chapter i. Introduction\nbody\nChapter ii. Methods\nbody\n"
+        assert detect_structure(text)["chapters_detected"] == 2
+
+    def test_roman_word_false_positives_rejected(self):
+        """Words that happen to be valid Roman numerals ('vi', 'cli', 'civ')
+        are NOT detected as chapters when they appear bare at line start."""
+        assert detect_structure("vi: the vim editor\nbody\n")["chapters_detected"] == 0
+        assert detect_structure("cli: command line reference\nbody\n")["chapters_detected"] == 0
+        assert detect_structure("civ: a civilization primer\nbody\n")["chapters_detected"] == 0
+        assert detect_structure("li: a list item\nbody\n")["chapters_detected"] == 0
+
+    def test_roman_word_false_positives_in_markdown_heading(self):
+        """Even in markdown headings, short lowercase-Roman words that are
+        real words ('vi', 'cli') should be validated via round-trip."""
+        from book_to_skill.utils import _chapter_number
+        assert _chapter_number("## vi: the editor") is not None  # legitimate Roman
+        assert _chapter_number("## vi. editor") is not None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  CLI help entry point
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestCliHelp:
+    """The documented help flags should print usage and exit successfully."""
+
+    @pytest.mark.parametrize("flag", ["--help", "-h"])
+    def test_help_flag_prints_console_script_usage(self, flag, monkeypatch, capsys):
+        monkeypatch.setattr("sys.argv", ["book-to-skill", flag])
+
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+
+        captured = capsys.readouterr()
+        assert exc_info.value.code == 0
+        assert "Usage: book-to-skill" in captured.err
+        assert "extract.py" not in captured.err
+        assert "Unknown flag" not in captured.err
+
+    def test_no_arguments_keeps_error_exit_with_same_usage(self, monkeypatch, capsys):
+        monkeypatch.setattr("sys.argv", ["book-to-skill"])
+
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+
+        captured = capsys.readouterr()
+        assert exc_info.value.code == 1
+        assert "Usage: book-to-skill" in captured.err
+        assert "extract.py" not in captured.err
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Fix #5 — Unknown flag warning in parse_arguments
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestParseArgumentsUnknownFlags:
+    """Unknown flags should emit a warning, not be silently ignored."""
+
+    def test_unknown_flag_warns(self):
+        """An unknown flag like --mod should print a warning to stderr."""
+        paths, mode, _ = parse_arguments(
+            ["extract.py", "book.pdf", "--mod", "technical"]
+        )
+        assert mode == "text"  # default, since the flag is unknown
+
+    def test_unknown_flag_stderr_message(self):
+        """The warning message should mention the unknown flag name."""
+        import io
+        stderr = io.StringIO()
+        with mock.patch("sys.stderr", stderr):
+            parse_arguments(["extract.py", "book.pdf", "--unknown-flag"])
+        output = stderr.getvalue()
+        assert "WARNING" in output
+        assert "--unknown-flag" in output
+
+    def test_known_flags_dont_warn(self, capsys):
+        """Known flags (--mode, --install-missing) should not produce warnings."""
+        parse_arguments(["extract.py", "book.pdf", "--mode", "technical", "--install-missing", "no"])
+        captured = capsys.readouterr()
+        assert captured.err == ""
+
+    def test_path_args_not_warned(self, capsys):
+        """Path arguments starting with '-' (like negative numbers) should not be warned as flags."""
+        parse_arguments(["extract.py", "book.pdf", "notes.txt"])
+        captured = capsys.readouterr()
+        assert captured.err == ""
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  CJK-aware token estimate (rescued from #70)
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestCjkTokenEstimate:
+    """estimate_tokens counts CJK codepoints directly, not whitespace words."""
+
+    def test_latin_estimate_unchanged(self):
+        # The project's long-standing pinned ratio: 100 words -> 133 tokens.
+        assert estimate_tokens(" ".join(["word"] * 100)) == 133
+
+    def test_cjk_is_not_undercounted(self):
+        # 1500 space-less Chinese chars must estimate ~1000 tokens, not ~1.
+        assert estimate_tokens("中" * 1500) == 1000
+
+    def test_mixed_latin_and_cjk(self):
+        # Latin words + CJK chars are both counted.
+        assert estimate_tokens("hello 世界 " * 100) > 100
+
+    def test_empty_is_zero(self):
+        assert estimate_tokens("") == 0

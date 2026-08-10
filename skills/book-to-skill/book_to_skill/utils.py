@@ -16,6 +16,7 @@ from book_to_skill.config import (
     OUTPUT_TEXT,
     OUTPUT_META,
     WORDS_PER_TOKEN,
+    CJK_CHARS_PER_TOKEN,
     SUPPORTED_EXTENSIONS,
     TEXT_EXTENSIONS,
     HTML_EXTENSIONS,
@@ -44,10 +45,35 @@ from book_to_skill.parsers.epub import (
     extract_with_zipfile,
     count_epub_chapters,
 )
+from book_to_skill.sanitize import sanitize_extracted_text
+
+
+# CJK codepoints: ideographs + extensions, kana, hangul, CJK punctuation, and
+# fullwidth forms. These are not whitespace-delimited, so counting "words" on a
+# Chinese/Japanese book collapses it to a handful of tokens; count them directly.
+_CJK_RE = re.compile(
+    r"[　-〿぀-ヿ㐀-䶿一-鿿"
+    r"가-힣豈-﫿＀-￯]"
+)
 
 
 def estimate_tokens(text: str) -> int:
-    return int(len(text.split()) / WORDS_PER_TOKEN)
+    """Estimate the token count of ``text`` with a deterministic heuristic.
+
+    Latin / whitespace-delimited text is counted by words (``words /
+    WORDS_PER_TOKEN`` — the project's long-standing ratio). CJK characters are
+    counted directly against ``CJK_CHARS_PER_TOKEN`` because they carry little
+    or no whitespace; without this a space-less Chinese/Japanese book estimates
+    at a few tokens and the cost pre-flight under-reports by ~1000x. Kept
+    dependency-free on purpose so the same book always yields the same number.
+    """
+    if not text:
+        return 0
+    cjk = len(_CJK_RE.findall(text))
+    if not cjk:
+        return int(len(text.split()) / WORDS_PER_TOKEN)
+    latin_words = len(_CJK_RE.sub(" ", text).split())
+    return int(latin_words / WORDS_PER_TOKEN + cjk / CJK_CHARS_PER_TOKEN)
 
 
 # Explicit chapter heading: "Chapter 5", "Capítulo 5: ...", "Chapter 1. Intro".
@@ -56,7 +82,7 @@ def estimate_tokens(text: str) -> int:
 # the longer words match in full. Captures the number (bounded to 1..99 — drops
 # years like "2025.") and whatever follows it on the line, so we can reject prose.
 _EXPLICIT_CHAPTER = re.compile(
-    r"^\s*(?:chapter|chapitre|kapitel|cap[ií]tulo|capitolo|hoofdstuk|ch\.?)\s*(\d{1,2})\b(?P<rest>.*)$",
+    r"^\s*(?:chapter|chapitre|kapitel|cap[ií]tulo|capitolo|hoofdstuk|ch\.?)\s*(?:(\d{1,2})|(?P<roman>[IVXLCDMivxlcdm]{1,7}))\b(?P<rest>.*)$",
     re.IGNORECASE,
 )
 # A heading's number is followed by end-of-line, punctuation (“. : - —“), or a
@@ -66,10 +92,18 @@ _EXPLICIT_CHAPTER = re.compile(
 _HEADING_TAIL = re.compile(r"^\s*$|^\s*[.:\-—–]|^\s+[A-ZÀ-Þ0-9\"“(]")
 
 # Roman-numeral chapter heading: "I: Loomings", "II. The Carpet-Bag".
-# Requires a separator (":" or ".") and a Capitalized title after it, so a bare
-# "I" or "V." (a page divider / list marker) is not mistaken for a chapter.
-_ROMAN_HEAD = re.compile(r"^\s*([IVXLCDM]+)\s*[:.]\s+[A-ZÀ-Þ\"“(]")
+# Uppercase alone at line start is safe — no common English word is a valid
+# uppercase Roman numeral.  Lowercase ("i: Loomings") is only accepted inside
+# a markdown heading ("## i. introduction") to avoid false positives from
+# words that happen to be valid Roman numerals ("vi: the editor" → 6).
+_ROMAN_HEAD = re.compile(r"^\s*([IVXLCDM]+)\s*[:.]\s+[A-ZÀ-Þ0-9\"“(]")
+_LC_MD_ROMAN = re.compile(r"^\s*#{1,6}\s+([ivxlcdm]+)\s*[:.]\s+[A-Za-zÀ-Þ\"“(]")
 _ROMAN_VALUES = {"I": 1, "V": 5, "X": 10, "L": 50, "C": 100, "D": 500, "M": 1000}
+
+# Optional Markdown / AsciiDoc heading prefix ("## Chapter 1", "== Section").
+# Stripped in _chapter_number() as a second pass so the CJK/Thai/Korean
+# matchers (which already tolerate the prefix inline) are untouched. (Issue #91)
+_MD_HEADING_PREFIX = re.compile(r"^(#{1,6}|={1,6})\s+")
 
 # Chinese chapter headings. Two common styles:
 #   1. explicit "第N章" / "第 3 回" / "第十二节" / "第一讲" — 第 + numeral + a
@@ -92,6 +126,32 @@ _CN_NUM_CLASS = "〇零一二两三四五六七八九十百千"
 _FW_DIGITS = "０-９"
 _CN_CHAPTER = re.compile(rf"^\s*第\s*([0-9{_FW_DIGITS}{_CN_NUM_CLASS}]+)\s*[章回卷节篇讲]")
 _MD_CN_HEADING = re.compile(rf"^#{{1,6}}\s+第?\s*([{_FW_DIGITS}{_CN_NUM_CLASS}]+)\s*[·、.:：章回卷节篇讲]")
+
+# Thai chapter headings: "บทที่ 3", "บทที่ ๑๒", "ตอนที่ ๘๗", "ภาคที่ 2".
+# Thai digits (U+0E50-U+0E59) are positional like Arabic — unlike the Chinese
+# numerals above they need no unit composition, only a digit remap. Optional
+# Markdown "#" prefix so "## บทที่ ๑" is recognized in converted ebooks.
+_TH_DIGITS = "๐-๙"
+_TH_DIGIT_MAP = str.maketrans("๐๑๒๓๔๕๖๗๘๙", "0123456789")
+_TH_CHAPTER = re.compile(
+    rf"^\s*(?:#{{1,6}}\s+)?(?:บทที่|ตอนที่|ภาคที่|บท|ตอน|ภาค)\s*([0-9{_TH_DIGITS}]+)\b"
+)
+
+# Korean chapter headings: "제1장 총칙", "## 제4장 근로시간과 휴식", "제6장의2 …".
+# 제 + Arabic numeral + a classifier (장 chapter / 편 part / 절 section / 관
+# subsection), with an optional "의N" branch suffix that Korean statutes use for
+# inserted chapters (제6장의2). Modern Korean numbers chapters with Arabic digits,
+# so unlike the Chinese branch no numeral composition is needed. Optional Markdown
+# "#" prefix so "## 제1장" is recognized in converted ebooks.
+#
+# The trailing group is the Korean analogue of _HEADING_TAIL: Korean has no letter
+# case, so the existing "capitalized title word" test does not transfer.
+# Requiring end-of-line, punctuation, or whitespace-then-content is what separates
+# a heading from a prose cross-reference, because Korean particles attach directly
+# to the noun ("제5장에서", "제2장의") with no intervening space.
+_KO_CHAPTER = re.compile(
+    r"^\s*(?:#{1,6}\s+)?제\s*([0-9]+)\s*[장편절관](?:\s*의\s*[0-9]+)?(?:\s*$|[.:\-]|\s+\S)"
+)
 
 # Table-of-contents header lines across common languages. Anchored to a whole
 # line (^\s*X\s*$) so an inline "the contents of this chapter" never matches.
@@ -227,25 +287,55 @@ def _roman_to_int(s: str) -> int | None:
     return total if _int_to_roman(total) == s else None
 
 
-def _chapter_number(line: str) -> int | None:
-    """Return the chapter number if the line is a genuine chapter heading.
-
-    Handles Arabic ("Chapter 5", "Capítulo 5: ..."), Roman-numeral
-    ("I: Loomings", "II. The Carpet-Bag") and Chinese ("第三章 …", "## 一 · …",
-    "## 第一讲") heading styles.
-    """
+def _match_chapter_number(line: str) -> int | None:
+    """Return the chapter number if the line is a genuine chapter heading,
+    with no Markdown/AsciiDoc heading prefix (the caller strips it first)."""
     s = line.strip()
     if len(s) > 80:
         return None
     m = _EXPLICIT_CHAPTER.match(s)
     if m and _HEADING_TAIL.match(m.group("rest")):
-        return int(m.group(1))
-    rm = _ROMAN_HEAD.match(s)
+        if m.group(1):
+            return int(m.group(1))
+        return _roman_to_int(m.group("roman").upper())
+    rm = _ROMAN_HEAD.match(s) or _LC_MD_ROMAN.match(s)
     if rm:
         return _roman_to_int(rm.group(1))
     cm = _CN_CHAPTER.match(s) or _MD_CN_HEADING.match(s)
     if cm:
         return _cn_numeral_to_int(cm.group(1))
+    tm = _TH_CHAPTER.match(s)
+    if tm:
+        return int(tm.group(1).translate(_TH_DIGIT_MAP))
+    km = _KO_CHAPTER.match(s)
+    if km:
+        return int(km.group(1))
+    return None
+
+
+def _chapter_number(line: str) -> int | None:
+    """Return the chapter number if the line is a genuine chapter heading.
+
+    Handles Arabic ("Chapter 5", "Capítulo 5: ..."), Roman-numeral
+    ("I: Loomings", "## i. introduction", "II. The Carpet-Bag"),
+    Chinese ("第三章 …", "## 一 · …", "## 第一讲"), Thai ("บทที่ 3",
+    "## บทที่ ๑"), and Korean ("제1장 총칙", "## 제4장 근로시간과 휴식")
+    heading styles — each optionally preceded by a Markdown/AsciiDoc heading
+    marker ("## Chapter 1" is a chapter heading just like "Chapter 1").
+    """
+    match = _match_chapter_number(line)
+    if match is not None:
+        return match
+    # Second pass: a Markdown/AsciiDoc heading prefix ("## Chapter 1",
+    # "== Section") hides the heading from the matchers above — the CJK
+    # matchers tolerate the prefix inline but the Latin/Thai/Korean ones anchor
+    # on the line start. Strip the prefix and retry so --mode technical
+    # (Docling emits headings as Markdown) detects the same chapters as
+    # plain-text extraction. (Issue #91)
+    s = line.strip()
+    md = _MD_HEADING_PREFIX.match(s)
+    if md:
+        return _match_chapter_number(s[md.end():])
     return None
 
 
@@ -306,6 +396,7 @@ def parse_arguments(argv: list[str]) -> tuple[list[str], str, str]:
         elif arg == "--no-install-missing":
             i += 1
         elif arg.startswith("-"):
+            print(f"WARNING: Unknown flag '{arg}' — ignoring it.", file=sys.stderr)
             i += 1
         else:
             input_paths.append(arg)
@@ -523,7 +614,20 @@ def extract_single_file(input_path: Path, extraction_mode: str, install_mode: st
         method = "ebook-convert"
         pages = 0
         pages_label = "sections"
-        
+
+    text, removed_invisible = sanitize_extracted_text(text)
+    if removed_invisible:
+        print(
+            f"  [security] removed {removed_invisible} invisible Unicode "
+            f"code point(s) from {input_path.name}",
+            file=sys.stderr,
+        )
+    if not text.strip():
+        raise ExtractionError(
+            f"Extracted text from {input_path.name} contained no visible content "
+            "after Unicode sanitization."
+        )
+
     tokens = estimate_tokens(text)
     structure = detect_structure(text)
     file_size_mb = os.path.getsize(input_str) / (1024 * 1024)
@@ -555,16 +659,32 @@ def print_banner() -> None:
         pass  # best-effort: never block extraction on the banner
 
 
+def print_usage() -> None:
+    """Print standalone CLI usage."""
+    print(
+        "Usage: book-to-skill <path-to-document-folder-or-glob>... "
+        "[--mode technical|text] [--install-missing ask|yes|no]",
+        file=sys.stderr,
+    )
+    print(
+        "       book-to-skill --check    # report which extractors are installed",
+        file=sys.stderr,
+    )
+    print(f"Supported formats: {supported_formats_message()}", file=sys.stderr)
+
+
 def main():
     print_banner()
+
+    if any(arg in {"-h", "--help"} for arg in sys.argv[1:]):
+        print_usage()
+        sys.exit(0)
 
     if "--check" in sys.argv[1:]:
         sys.exit(run_dependency_check())
 
     if len(sys.argv) < 2:
-        print("Usage: extract.py <path-to-document-folder-or-glob>... [--mode technical|text] [--install-missing ask|yes|no]", file=sys.stderr)
-        print("       extract.py --check    # report which extractors are installed", file=sys.stderr)
-        print(f"Supported formats: {supported_formats_message()}", file=sys.stderr)
+        print_usage()
         sys.exit(1)
         
     raw_input_paths, extraction_mode, install_mode = parse_arguments(sys.argv)
@@ -617,8 +737,11 @@ def main():
     total_words = len(consolidated_text.split())
     total_tokens = estimate_tokens(consolidated_text)
     
-    # Detect structure on consolidated text
-    consolidated_structure = detect_structure(consolidated_text)
+    # Detect structure from source content only. The generated SOURCE banners in
+    # full_text.txt use rows of "=", which can otherwise become phantom setext
+    # headings and make the result depend on the source-path length.
+    structure_text = "\n\n".join(src["text"] for src in extracted_sources)
+    consolidated_structure = detect_structure(structure_text)
     
     metadata = {
         "source_file": "Consolidated from multiple sources" if len(extracted_sources) > 1 else extracted_sources[0]["source_file"],
@@ -654,7 +777,14 @@ def main():
         **consolidated_structure,
     }
     
-    OUTPUT_META.write_text(json.dumps(metadata, indent=2, ensure_ascii=False))
+    # encoding="utf-8" is required, not cosmetic: the payload is dumped with
+    # ensure_ascii=False, so any non-ASCII chapter heading, filename or path
+    # reaches the encoder verbatim. Without it, write_text() falls back to the
+    # locale encoding and raises UnicodeEncodeError on a Windows cp1252 host or
+    # under LC_ALL=C — after every source has already been extracted.
+    OUTPUT_META.write_text(
+        json.dumps(metadata, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
     
     page_line = f"   Total Pages: {total_pages}"
     print("\nExtraction complete:")

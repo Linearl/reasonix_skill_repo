@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/logo.png" alt="book-to-skill logo" width="120">
+  <img src="docs/assets/banner.webp" alt="Booklin, the book-to-skill wizard, holding an open book whose pages scatter into sparkles that settle into an ordered grid" width="100%">
 </p>
 
 <h1 align="center">book-to-skill</h1>
@@ -16,29 +16,26 @@
   <a href="https://github.com/sponsors/virgiliojr94"><img src="https://img.shields.io/github/sponsors/virgiliojr94?style=for-the-badge&color=ea4aaa&logo=githubsponsors&logoColor=white" alt="Sponsor"></a>
 </p>
 
-<a href="https://trendshift.io/repositories/27038?utm_source=repository-badge&amp;utm_medium=badge&amp;utm_campaign=badge-repository-27038" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/repositories/27038" alt="virgiliojr94%2Fbook-to-skill | Trendshift" width="250" height="55"/></a>
-
 <p align="center">
-  🏆 <strong>#10 Python Repository of the Day</strong> and <strong>#25 Repository of the Day</strong> on Trendshift (May 23, 2026)
+  <a href="https://trendshift.io/repositories/27038?utm_source=repository-badge&amp;utm_medium=badge&amp;utm_campaign=badge-repository-27038" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/repositories/27038" alt="virgiliojr94%2Fbook-to-skill | Trendshift" width="250" height="55"/></a>
+  <a href="https://trendshift.io/repositories/27038?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-27038" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/27038/daily?language=Python" alt="virgiliojr94%2Fbook-to-skill | Trendshift (daily, Python)" width="250" height="55"/></a>
 </p>
 
 <p align="center">
   <a href="#-why">Why</a> ·
   <a href="#-what-it-generates">What it generates</a> ·
   <a href="#-beyond-books">Beyond books</a> ·
-  <a href="#-usage">Usage</a> ·
-  <a href="#-requirements">Requirements</a> ·
-  <a href="#-how-it-works">How it works</a> ·
-  <a href="#-the-discovery-loop-tax">Discovery Loop Tax</a> ·
-  <a href="#-faq">FAQ</a> ·
-  <a href="#-install">Install</a> ·
-  <a href="CHANGELOG.md">Changelog</a> ·
-  <a href="docs/PERFORMANCE.md">Performance</a> ·
-  <a href="docs/ARCHITECTURE.md">Architecture</a>
+  <a href="docs/how-it-works.md">How it works</a> ·
+  <a href="docs/usage.md">Usage</a> ·
+  <a href="docs/install.md">Install</a> ·
+  <a href="docs/faq.md">FAQ</a> ·
+  <a href="docs/performance.md">Performance</a> ·
+  <a href="docs/architecture.md">Architecture</a> ·
+  <a href="CHANGELOG.md">Changelog</a>
 </p>
 
 <p align="center">
-  <strong>24×–51× fewer tokens than dumping the book into context</strong> to answer one question, measured on real books (<a href="#-the-discovery-loop-tax">how it's measured</a>).
+  <strong>24×–51× fewer tokens than dumping the book into context</strong> to answer one question, measured on real books (<a href="docs/performance.md#the-discovery-loop-tax">how it's measured</a>).
 </p>
 
 **How it works, in 3 steps:**
@@ -50,6 +47,8 @@
 ---
 
 ## 🤔 Why
+
+<img align="right" width="200" src="docs/assets/booklin.png" alt="Booklin — the book-to-skill mascot, a purple wizard holding a book">
 
 You buy a great technical book. You read it once. Three months later you can't remember chapter 7 existed.
 
@@ -95,44 +94,54 @@ If you re-open a document often enough to wish you'd memorized it, it's a candid
 
 ---
 
-## 🚀 Usage
 
-```
-/book-to-skill <path-to-document-folder-or-glob>... [skill-name-slug]
-```
+## 🧾 The Discovery Loop Tax
 
-Supported document formats: PDF, EPUB, DOCX, TXT, Markdown, reStructuredText, AsciiDoc, HTML, RTF, MOBI/AZW/AZW3.
+A PDF-reading agent doesn't just read — it *navigates*: it re-fetches the ToC, backtracks, and re-processes all of it on every turn. book-to-skill pays that structuring cost **once**, at conversion, so queries stay proportional to the answer — **24×–51× fewer tokens** than dumping the book into context, measured on real books.
 
-**Examples:**
-
-```bash
-# Process several files together into a unified skill
-/book-to-skill ~/papers/paper1.pdf ~/notes/export.txt unified-research
-
-# Process all supported files in a folder together
-/book-to-skill ~/workspace/project-docs/ project-knowledge
-
-# Process files matching a glob pattern
-/book-to-skill "~/books/*.epub" my-library
-
-# Update/fold new material into an existing skill folder
-/book-to-skill ~/articles/new-paper.pdf ~/.claude/skills/project-knowledge
-```
-
-After the skill is created, use it like any other agent skill:
-
-```bash
-/designing-data-intensive-apps                  # load core mental models
-/designing-data-intensive-apps replication      # find and explain a topic
-/designing-data-intensive-apps ch05             # dive into chapter 5
-/designing-data-intensive-apps "what chapters do you have?"
-```
-
-In GitHub Copilot CLI you may need to run `/skills reload` after the file is written so the new skill appears in `/skills list`. Claude Code and Amp pick it up on the next session.
+📊 **Full methodology, numbers, and per-book tables → [docs/performance.md](docs/performance.md#the-discovery-loop-tax)**
 
 ---
 
-## 🔧 Requirements
+## ⚙️ How it works
+
+Two halves: a deterministic Python **extractor** (document → clean text + metadata) and a spec-driven **generator** (your agent follows `SKILL.md` to turn that into a structured skill). On-demand chapter files keep the loaded skill small.
+
+🔧 **Full walkthrough (Steps 0–10, extraction modes, token budgets) → [docs/how-it-works.md](docs/how-it-works.md)**
+
+---
+
+## 🚀 Usage
+
+`/book-to-skill <path|folder|glob> [skill-name]` — plus analyze-only, generate-from-analysis, and update/fold-in modes.
+
+▶️ **All modes and examples → [docs/usage.md](docs/usage.md)**
+
+---
+
+## 📥 Install
+
+```bash
+# Agent skill (registers /book-to-skill) — clone into your skills folder:
+git clone https://github.com/virgiliojr94/book-to-skill.git ~/.claude/skills/book-to-skill
+# (Copilot CLI: ~/.copilot/skills/ · Amp/cross-agent: ~/.agents/skills/)
+```
+
+📥 **All hosts, optional extractors, and the standalone CLI → [docs/install.md](docs/install.md)**
+
+---
+
+## ❓ FAQ
+
+Common questions — "why not just dump the PDF?", cost, privacy, non-book inputs, multi-file books.
+
+❓ **Answers → [docs/faq.md](docs/faq.md)**
+
+---
+
+<details>
+<summary>🔧 <strong>Requirements</strong></summary>
+
 
 The extractor tries tools in order per format and uses the first available. If nothing is installed, it tells you which command to run. Plain text, Markdown, reStructuredText and AsciiDoc need no extra deps.
 
@@ -168,244 +177,12 @@ The extractor tries tools in order per format and uses the first available. If n
 
 ---
 
-## ⚙️ How it works
-
-```
-One file · a folder · a glob · a list of paths
-     │
-     ▼
-Step 1.5 — "Technical or text-heavy book?"
-     │
-     ├── technical → Docling  (tables + code blocks as markdown, ~1.5s/page)
-     └── text      → pdftotext → pypdf → pdfminer  (instant)
-     │
-     ▼
-scripts/extract.py <paths…> --mode <technical|text>
-  per source: PDF → pdftotext/Docling · EPUB → ebooklib → stdlib zipfile · DOCX/HTML/RTF/…
-  (one bad source is skipped with a warning; the rest still process)
-     │
-     ├── /tmp/book_skill_work/full_text.txt   (all sources merged, with source markers)
-     └── /tmp/book_skill_work/metadata.json   (aggregated stats + per-source array)
-               │
-               ▼
-          Claude analyzes structure
-          (title, author, chapters, ToC — spanning all sources)
-          ── or, if targeting an existing skill: folds new content in (Mode 4)
-               │
-               ▼
-          Generates per-chapter summaries  (800–1,200 tokens each)
-          technical → includes Code Examples + Reference Tables sections
-          Generates glossary, patterns, cheatsheet
-          Generates master SKILL.md with core mental models
-               │
-               ▼
-          Skill written to one of:
-            ~/.copilot/skills/<slug>/   (GitHub Copilot CLI)
-            ~/.agents/skills/<slug>/    (Copilot CLI or Amp, cross-agent)
-            ~/.claude/skills/<slug>/    (Claude Code)
-          /tmp/book_skill_work/         🗑️  cleaned up
-```
-
-**Extraction benchmark** (103-page technical book, CPU only):
-
-| Method | Time | Tokens | Tables | Code blocks |
-|--------|------|--------|--------|-------------|
-| pdftotext | 0.1s | 27K | 0 | 0 |
-| Docling | 164s | 27K (+1.2%) | 48 | 36 |
-
-**Real conversions** (measured: pages, extracted tokens, chapters auto-detected,
-estimated one-pass cost on Claude Sonnet 4.5 at \$3/\$15 per MTok):
-
-| Book | Format | Pages | Tokens | Chapters | ~Cost |
-|------|--------|------:|-------:|---------:|------:|
-| Think Python 2 | PDF | 244 | 119K | 19 | \$0.88 |
-| Working Backwards | PDF | 371 | 175K | 10 | \$0.96 |
-| Pro Git | PDF | 501 | 229K | — † | \$1.23 |
-| Moby-Dick | EPUB | — | 301K | — † | \$1.42 |
-
-† Chapter auto-detection needs explicit `Chapter N` / `Capítulo N` headings. Pro Git
-uses section titles and Moby-Dick uses chapter *titles* / roman numerals, so neither
-auto-segments — extraction and conversion still work, but you point at sections
-manually. A full skill costs roughly **\$1 per book**; far less than re-reading the
-PDF every session.
-
-<details>
-<summary>Design principles (click to expand)</summary>
-
-1. **Density over completeness** — a 1,000-token summary beats a 10,000-token excerpt
-2. **Practitioner voice** — "Use X when Y", not "The book explains X"
-3. **Front-loaded SKILL.md** — compaction keeps the first ~5,000 tokens; the most important content comes first
-4. **On-demand chapters** — the topic index tells Claude which file to read; chapters load only when needed
-5. **Never raw text** — always synthesize, summarize, extract signal from the source
 
 </details>
 
----
+<details>
+<summary>📁 <strong>Repository structure</strong></summary>
 
-## 🧾 The Discovery Loop Tax
-
-A PDF-reading agent doesn't just read — it *navigates*. Ask it one question and it
-fetches the table of contents, notices a term it can't define, pulls more pages,
-backtracks. Every one of those hops lands in the conversation history and gets
-**re-processed on every subsequent turn**. To stay inside its budget, a sub-agent
-is then forced to compress what it read at brutal ratios, handing the main agent a
-**degraded summary it can't fact-check** against the source.
-
-book-to-skill pays the navigation cost **once, at compile time**. At runtime the
-assistant loads a small resident core plus the one pre-compiled chapter it needs —
-no discovery loop, no compress-to-fit, and the full extracted source stays on disk
-for verification.
-
-**Measured, not asserted.** Running [`tools/discovery_tax.py`](tools/discovery_tax.py)
-on three real books — tokens entering context to answer a single targeted question
-(book-to-skill = resident core + one compiled chapter ≈ 5,000 tokens):
-
-| Book (size) | Context-dump | Discovery loop | book-to-skill | vs dump / loop |
-|-------------|-------------:|---------------:|--------------:|:--------------:|
-| Think Python 2 (119K, small chapters) | 119,264 | 12,152 | ~5,000 | 24× / **2.4×** |
-| Working Backwards (175K, medium chapters) | 175,253 | 33,444 | ~5,000 | 35× / 6.7× |
-| AI Engineering (256K, large chapters) | 256,287 | 77,866 | ~5,000 | 51× / **15.6×** |
-
-The advantage **scales with chapter size**: against a context-dump it's consistently
-24–51× (and that cost recurs *every turn*); against a one-time discovery loop it
-ranges from a modest 2.4× on a book of small chapters to 15.6× on one of large
-chapters. Reproduce on your own book:
-
-```bash
-python3 tools/discovery_tax.py --full-text /tmp/book_skill_work/full_text.txt --target-chapter 5
-```
-
-> **Honest caveats:** (1) the discovery figures are a one-time cost and a *model*
-> using the book's real ToC/chapter sizes — a well-tuned agent lands nearer the best
-> case; the context-dump cost, by contrast, recurs on **every** turn. (2) The tool
-> needs explicit `Chapter N` / `Capítulo N` headings to segment a book; titles-only
-> or roman-numeral books (and EPUBs extracted without `ebooklib`) won't segment
-> cleanly. book-to-skill wins when you return to the knowledge repeatedly; for a
-> single one-off read, a plain PDF agent is fine.
-
----
-
-## ❓ FAQ
-
-**"Can't I just dump the PDF/EPUB into my Claude project context?"**
-
-You can — but every conversation will burn that token budget upfront. A 400-page book is ~200K tokens. With a skill, only the chapters relevant to your question load — typically a SKILL.md core (~4K) plus the one chapter you asked about (~1K). The rest stays on disk until you need it.
-
-The economics are amortization, not size. Pasting the book pays the full token bill **on every turn of every session, forever**. book-to-skill pays the extraction cost **once** and every future conversation loads only the slice it needs. The bigger your context window, the more this matters — a large window makes the dump *possible*, not *cheap*.
-
-More importantly: raw text injection is retrieval. A skill is reasoning. When you load a chapter file, Claude isn't searching for keyword matches — it's working with pre-extracted named frameworks, principles, and mental models structured for application, not for reading.
-
----
-
-**"Claude has a 1M-token context window now — can't I just keep the whole book loaded?"**
-
-A bigger window changes what *fits*, not what's *smart*. Three reasons it isn't a substitute:
-
-- **You pay per token, per call.** A 1M window doesn't make those tokens free — it makes a large, recurring bill possible. The skill loads kilobytes, not megabytes.
-- **Recall degrades with fill.** Models lose precision retrieving a specific fact buried in a near-full context ("lost in the middle"). A 1K curated chapter beats 200K of raw prose for answering one question.
-- **Window ≠ structure.** A full book in context is still raw text the model must re-parse every turn. The skill ships pre-extracted frameworks — reasoning, not retrieval.
-
-Use the big window for what it's good at: a one-off pass over material you'll never need again. Use a skill for knowledge you'll reach for repeatedly.
-
----
-
-**"Isn't this just RAG?"**
-
-RAG works at query time: chunk the book → embed everything → find similar vectors → inject into prompt. It's optimized for "find me the part that talks about X."
-
-book-to-skill works at compile time: one deep analysis run extracts the author's actual frameworks, names them, describes when to use each, captures the anti-patterns. The output is structure the author spent years building — not a similarity search over their sentences.
-
-RAG answers: *"here are chunks close to your query."*  
-A skill answers: *"here are the 12 frameworks this author built, ready to reason with."*
-
-Pick by shape of the job:
-
-- **Wide and shallow** — a library of dozens of books, "find the part that mentions X" → a RAG tool (e.g. CandleKeep) wins.
-- **Narrow and deep** — one book or a tight cluster of related sources, frameworks you apply while you work → book-to-skill wins.
-
-They're complementary, not competing: RAG indexes a shelf, book-to-skill masters a spine.
-
----
-
-**"Popular books are already in Claude's training data. Why bother?"**
-
-For widely-known books (Clean Code, DDIA, Pragmatic Programmer), Claude has general knowledge — but it's compressed, averaged across the entire internet's discussion of the book, and may hallucinate specific quotes or chapter locations.
-
-book-to-skill works from your actual copy. Every framework name, every anti-pattern list, every chapter number is grounded in the text you provided. No training data drift, no hallucinated chapter titles.
-
-It also shines for books Claude doesn't know at all: niche technical references, internal company documentation, recent publications, translated works.
-
----
-
-**"NotebookLM handles multiple books better."**
-
-Absolutely true — if your workflow is "I have 80 separate books and I want to search across all of them," NotebookLM is the right tool.
-
-book-to-skill is built for a different job: you want to go deep on a specific topic or library, having multiple related documents (papers, chapters, notes) folded into a single unified skill, and even updating it over time as new material arrives! This integrates your customized knowledge base right into your coding or writing workflow, rather than in a separate browser tab.
-
----
-
-## 📥 Install
-
-> **Two ways to use it, do not confuse them:**
-> - **As an agent skill** (the `/book-to-skill` command in Claude Code, Copilot CLI, or Amp) → **`git clone` into your skills folder** (below). This is what gives you the slash command and the full convert-a-book flow.
-> - **As a standalone CLI** (just the text extractor) → `pip install book-to-skill`, then `book-to-skill --help`. This does **not** register the agent skill; it only installs the extraction engine. See [the CLI section](#standalone-cli-pip).
-
-The skill follows the open [Agent Skills](https://github.com/agentskills/agentskills) standard, so a single install works for any compatible host.
-
-**GitHub Copilot CLI** (personal skill):
-
-```bash
-git clone https://github.com/virgiliojr94/book-to-skill.git ~/.copilot/skills/book-to-skill
-# then, in a `copilot` session:
-/skills reload
-/skills info book-to-skill
-```
-
-Or the cross-agent path that Copilot CLI and Amp both discover:
-
-```bash
-git clone https://github.com/virgiliojr94/book-to-skill.git ~/.agents/skills/book-to-skill
-```
-
-**Claude Code**:
-
-Copy this into your Claude Code session:
-
-```
-Install book-to-skill: https://raw.githubusercontent.com/virgiliojr94/book-to-skill/master/SKILL.md
-```
-
-Or manually using standard `git clone` (ensures modular engine files are fetched correctly):
-
-```bash
-git clone https://github.com/virgiliojr94/book-to-skill.git ~/.claude/skills/book-to-skill
-```
-
-Then in any agent session:
-
-```bash
-/book-to-skill ~/path/to/your-book.pdf
-# or
-/book-to-skill ~/path/to/your-book.epub
-```
-
-### Standalone CLI (pip)
-
-`pip install book-to-skill` is a **separate, optional** path. It installs only the
-text-extraction engine as a CLI, for scripting or to grab the optional extractors;
-it does **not** register the `/book-to-skill` agent skill (use the `git clone` above
-for that).
-
-```bash
-pip install "book-to-skill[pdf,epub,docx]"   # engine + optional extractors
-book-to-skill ~/path/to/book.pdf --mode text  # or: python -m book_to_skill ...
-book-to-skill --check                          # report which extractors are installed
-```
-
----
-
-## 📁 Repository structure
 
 ```
 book-to-skill/
@@ -423,8 +200,8 @@ book-to-skill/
 │   └── validate_skill.py # checks a generated SKILL.md against host rules (--lens claude|copilot|amp)
 ├── tests/                # pytest suite (extraction, detection, discovery tax)
 ├── docs/
-│   ├── PERFORMANCE.md    # measured benchmarks, discovery tax, cost
-│   └── ARCHITECTURE.md   # pipeline + component map
+│   ├── performance.md    # measured benchmarks, discovery tax, cost
+│   └── architecture.md   # pipeline + component map
 ├── CHANGELOG.md          # release history (semver)
 ├── CONTRIBUTING.md       # dev setup, PR conventions, release process
 ├── SECURITY.md           # vulnerability reporting
@@ -433,6 +210,10 @@ book-to-skill/
 
 ---
 
+
+</details>
+
+---
 ## ⚖️ Copyright & fair use
 
 book-to-skill ships **no book content** — not a single page. It's a converter you point at files you already own.
@@ -447,6 +228,8 @@ When in doubt, follow the license or terms of the source document. This project 
 ---
 
 ## 💖 Sponsors
+
+<img align="right" width="150" src="docs/assets/booklin-celebrating.png" alt="Booklin celebrating">
 
 book-to-skill is free and MIT-licensed, maintained on personal time. If it saves you tokens or study hours, consider sponsoring its upkeep: PR reviews, multilingual fixes, releases, and docs.
 
