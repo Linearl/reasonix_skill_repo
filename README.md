@@ -1,9 +1,9 @@
 # Reasonix 实用技能包
 
-> 面向 **Reasonix**（兼容 Claude Code 等支持 Agent Skills 的客户端）的实战技能集合：12 个技能，覆盖**专利检索、知识加工、网页抓取、本地 OCR、项目管理、笔记整理、远程部署**七大场景，全部来自真实项目实战沉淀。
+> 面向 **Reasonix**（兼容 Claude Code 等支持 Agent Skills 的客户端）的实战技能集合：14 个技能，覆盖**专利检索、知识加工、网页抓取、本地 OCR、项目管理、笔记整理、远程部署**七大场景，全部来自真实项目实战沉淀。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Skills](https://img.shields.io/badge/Skills-12-blue)](#-技能清单)
+[![Skills](https://img.shields.io/badge/Skills-14-blue)](#-技能清单)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)](#-安装)
 
 每个技能是一个自包含目录（`SKILL.md` + 配套脚本/参考文档），复制即用，无框架依赖。
@@ -15,17 +15,21 @@
 | # | 技能 | 作用 | 说明 |
 |---|------|------|------|
 | 1 | [patent-search](skills/patent-search/) | innojoy + Google Patents 自动化检索、检索式设计、对比文件分级、新颖性/创造性评估、交底书撰写 | ⚠️ **需公司账号**（innojoy 登录凭据自行配置） |
-| 2 | [book-to-skill](skills/book-to-skill/) | 把 PDF / EPUB / DOCX / HTML / Markdown 等文档提炼成可复用的 agent 技能（框架、心智模型、原则、反模式），附完整 Python 工具链 | 开源项目技能化（MIT，原作者保留版权） |
+| 2 | [book-to-skill](skills/book-to-skill/) | 把 PDF / EPUB / DOCX / HTML / Markdown 等文档提炼成可复用的 agent 技能（框架、心智模型、原则、反模式），附完整 Python 工具链 | 开源项目技能化（MIT，原作者保留版权）；**从 ~/.claude/skills 复制** |
 | 3 | [web-scraping](skills/web-scraping/) | 任意网页抓取整理为 Markdown：探测 SSR/API、处理限流（-509 等）、CDP 复用 Chrome 登录态、图片本地化 | 基于 B 站专栏文集实战（22 篇、1912 张图、0 失败）；wbi 签名参考 [MediaCrawler](https://github.com/NanmiCoder/MediaCrawler)（自行拉取） |
 | 4 | [image-ocr-to-docs](skills/image-ocr-to-docs/) | 批量图片 OCR 转可检索文档：PaddleOCR + 放大预处理，输出同名 .md 或汇总清单，含双引擎交叉验证 | 纯本地推理，数据不出内网 |
 | 5 | [migrate-reasonix-project](skills/migrate-reasonix-project/) | 移动/重命名 Reasonix（及 Claude Code）项目目录时保留全部对话历史 | 覆盖会话文件、meta 路径改写、检查点与子代理元数据 |
-| 6 | [obsidian-markdown](skills/obsidian-markdown/) | Obsidian 风格 Markdown 语法规范：wikilink / embeds / callouts / properties / frontmatter | 笔记整理基础 |
-| 7 | [obsidian-bases](skills/obsidian-bases/) | Obsidian Bases（.base 文件）视图语法：表格/卡片视图、过滤器、公式、汇总 | 需要 Obsidian 1.10+ |
-| 8 | [obsidian-cli](skills/obsidian-cli/) | vault CLI 操作：创建/搜索/管理笔记、任务、属性；插件与主题开发调试 | 需要 Obsidian CLI |
+| 6 | [obsidian-markdown](skills/obsidian-markdown/) | Obsidian 风格 Markdown 语法规范：wikilink / embeds / callouts / properties / frontmatter | 笔记整理基础；**从 ~/.claude/skills 复制**（B站攻略整理） |
+| 7 | [obsidian-bases](skills/obsidian-bases/) | Obsidian Bases（.base 文件）视图语法：表格/卡片视图、过滤器、公式、汇总 | 需要 Obsidian 1.10+；**从 ~/.claude/skills 复制** |
+| 8 | [obsidian-cli](skills/obsidian-cli/) | vault CLI 操作：创建/搜索/管理笔记、任务、属性；插件与主题开发调试 | 需要 Obsidian CLI；**从 ~/.claude/skills 复制** |
 | 9 | [obsidian-vault-organize](skills/obsidian-vault-organize/) | vault 批量整理：移动/重命名/归档后全 vault 重写引用，断链校验归零 | 整理流水线收尾环节 |
 | 10 | [onenote-to-obsidian](skills/onenote-to-obsidian/) | OneNote .one 文件本地解析为 Markdown 并导入 Obsidian（OneNote COM API，**不依赖同步**） | 适合同步失败/分区丢失的本地恢复；Windows only |
 | 11 | [reasonix-remote-linux-setup](skills/reasonix-remote-linux-setup/) | 在 Linux 远程主机（含绿联 NAS 等魔改系统）上部署 reasonix serve 并打通 Windows 桌面版远程连接 | 含全部已知坑（SSH/SFTP 虚拟视图等），基于绿联 DX4600PRO 实战验证 |
 | 12 | [reasonix-sync-deploy](skills/reasonix-sync-deploy/) | 新机器接入 reasonix-sync 多机同步体系：环境探测、OneDrive 始终保留提示、定时任务创建、首次推送验证 | 多机共用一套技能与记忆；需先有同步体系 |
+| 13 | [gh-issue-submit](skills/gh-issue-submit/) | 用 gh CLI 向任意 GitHub 仓库提交 issue：模板发现（分支差异）、查重、权限切换陷阱、提交与验证 | 自研（GitHub 工作流；依赖 gh CLI 登录态） |
+| 14 | [github-issue-triage](skills/github-issue-triage/) | 自己仓库的 issue 自动化闭环：收集→分析→修复→验证→关闭，关闭前证据硬门槛、先评论后关闭 | 自研（依赖 github-mcp-server 与 Issues 读写权限） |
+
+**来源标注**：标"从 ~/.claude/skills 复制"的 4 个技能源自 B 站图文攻略整理流水线（obsidian-markdown / obsidian-bases / obsidian-cli / book-to-skill），与 Claude Code 通用；其余为本人工作实战自研沉淀。
 
 **组合流水线**：网页抓取（3）→ obsidian-markdown 规范化（6）→ obsidian-vault-organize 整理（9）；OneNote 旧笔记用（10）导入后同流水线整理。
 
