@@ -57,6 +57,15 @@ gh api "search/issues?q=repo:<owner>/<repo>+is:issue+in:title+<关键词>" --jq 
 - `github_pat_...`（fine-grained PAT）：你自己在 GitHub 设置的，存于环境变量 GITHUB_TOKEN/GH_TOKEN；写权限**仅限自己拥有的仓库**（All repositories 不含第三方仓库）——即使勾了 Issues: write，对第三方仓库提交也报 403，**改 token 权限无法解决**。
 - `gho_...`（OAuth user token）：`gh auth login` 走浏览器 OAuth 流程时生成，存入系统凭据管理器（Windows Credential Manager，即 gh 的 keyring）；scopes 默认含 `repo`，权限等同于网页会话——**可以对任意公开仓库提 issue**（无需 collaborator）。
 - 判定：`gh auth status` 看 active 凭据前缀与 scope。
+- **向第三方仓库提交前，若 active 凭据是 `github_pat_`（fine-grained PAT），不要硬提交（必 403）——主动向用户请求 OAuth 令牌**：
+  1. 先检查 keyring 是否已有 OAuth 凭据：`gh auth status` 中是否列出 `gho_` 开头的 keyring 账号；
+  2. 若有：提示用户确认使用该凭据（`env -u GITHUB_TOKEN -u GH_TOKEN gh auth switch` 场景），并说明 fine-grained PAT 对第三方仓库无效；
+  3. 若没有：请求用户执行浏览器 OAuth 授权（一次性，之后常驻 keyring）：
+     ```bash
+     gh auth login -h github.com -p https -w   # 浏览器授权后生成 gho_ 令牌
+     ```
+     向用户说明这是 gh CLI 官方 OAuth App 的授权页，点 Authorize 即可，不会暴露令牌值；
+  4. 授权完成后再继续提交。目标仓库是**用户自己拥有**时，fine-grained PAT 即可，无需 OAuth。
 
 **GITHUB_TOKEN / GH_TOKEN 环境变量会覆盖 gh 的所有账号管理！**
 
