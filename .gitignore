@@ -1,0 +1,30 @@
+# 凭据与敏感文件
+.env
+*.env
+!*.env.example
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 运行时数据
+browser_data/
+cache/
+data/
+*.db
+*.sqlite*
+
+# 打包产物
+*.7z
+*.zip
+*.tar.gz
+
+# 系统
+.DS_Store
+Thumbs.db
+
+# 编辑器
+.idea/
+.vscode/
