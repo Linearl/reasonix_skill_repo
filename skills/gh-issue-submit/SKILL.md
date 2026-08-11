@@ -1,6 +1,6 @@
 ---
 name: gh-issue-submit
-description: 用 gh CLI 提交 GitHub issue 的完整流程：模板发现（分支差异）、查重、权限切换陷阱、提交与验证
+description: 用 gh CLI 提交高质量 GitHub issue：模板发现、查重（含已关闭 issue 阅读）、源码调研根因、权限切换陷阱、computer use 回退、提交与验证
 ---
 
 # GitHub Issue 提交技能（gh-issue-submit）
@@ -40,15 +40,20 @@ gh api "search/issues?q=repo:<owner>/<repo>+is:issue+in:title+<关键词>" --jq 
 ```
 - 用多个关键词组合搜（功能名、症状、中英文都试）。
 - 找到相关 open issue 时：**不重复提交**——要么在已有 issue 下评论补充，要么新 issue 明确区分视角并引用旧 issue 编号（如"这是 #XXXX 提到的 follow-up"）。
+- **搜索限制**：`search/issues` 的 q 中 OR/AND 操作符合计不能超过 5 个（超限报 422 Validation Failed），多关键词拆成多个查询分别搜（如会话排序 / 会话分组各搜一次）。
+- **已关闭的旧 issue 也要读**：搜到相关但已 closed 的 issue 时，用 `gh issue view <编号> --comments` 读关闭原因与维护者评论——
+  - 若维护者留下"场景未覆盖可开 focused issue"之类的口子：新 issue 明确回应它并引用编号，采纳率显著提升（实例：#3177 关闭时维护者邀请 focused issue → #8194 精准切入）；
+  - 若维护者明确拒绝某方案：新 issue 必须说明视角差异（如"仅 UI 层组织视图，不引入第二套手工层级"），否则大概率被同理由关闭。
 
 ### 3. 撰写正文
 
 - **按模板字段组织**：yaml form 模板用 `### <字段 label>` 作为 markdown 标题分隔（GitHub 提交后表单渲染依赖这些标题）。
-- 结构建议（通用）：
-  - 现状/问题：谁遇到、当前行为、为什么是问题
-  - 期望/方案：命令、UX 草图、API 草图、实现草图（引用仓库内模块路径更佳）
-  - 范围界定：什么不做 / 与相邻 issue 的关系
-- **用仓库社区语言**：国际开源项目用英文，中文优先项目用中文。
+- **标题规范**：`[Feature]:` / `[Bug]:` 前缀 + 一句话概括 + 副标题式补充（可带根因关键词，利于检索），如 `[Bug]: 会话内改名后侧边栏延迟更新——事件未刷新列表快照`。
+- **bug 报告结构**：复现步骤（编号列表，含反例对照）/ 期望行为 / 实际行为 / **根因分析**（读源码后给 file:line 证据）/ 建议修复（分档：最小改动优先，贴现状代码 + 改动点）。
+- **feature 报告结构**：要解决的问题（真实场景 + 反例）/ 建议方案（含可选增强）/ 范围界定（什么不做）。
+- **提 bug 前先调研源码**：clone 仓库（`git clone --depth 1`）→ 定位问题链路（写入端？事件端？前端刷新端？）→ 用 file:line 证据支撑根因。能写出"写入端无延迟、事件已发、前端漏刷"这类三环节定位的 bug 报告，维护者可直接动手改。
+- **关联策略**：与既有 issue 的关系写明"互补但不依赖"或"follow-up of #XXXX"，避免被合并；明确区分视角（如"即使 #XXXX 修复，本场景仍存在"）。
+- **语言**：默认直接中文正文；国际项目可英文正文 + 中文评论双版（先问用户）。
 - 写完后存到工作区临时文件（如 `issue-<简述>.md`），避免 shell 转义问题。
 
 ### 4. 权限检查与账号切换（⚠️ 最容易踩坑）
@@ -82,7 +87,7 @@ gh auth status
 - 查看所有账号及 scope：`gh auth status` 会列出 keyring 账号。有 `repo` scope 的 OAuth token（`gho_...`）可以写 issues。
 - 切换账号前必须先清掉环境变量（否则切不动）：
   ```bash
-  unset GITHUB_TOKEN
+  unset GITHUB_TOKEN GH_TOKEN
   gh auth switch --user <用户名>
   ```
 - 注意：环境变量名有 `GITHUB_TOKEN` 和 `GH_TOKEN` 两个，都要清。`unset` 只在当前 shell 命令内生效，每条命令都要带上（如 `unset GITHUB_TOKEN GH_TOKEN; gh issue create ...`），或者用 `env -u GITHUB_TOKEN -u GH_TOKEN gh ...`。
