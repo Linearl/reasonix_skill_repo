@@ -14,7 +14,7 @@
 
 | # | 技能 | 作用 | 说明 |
 |---|------|------|------|
-| 1 | [patent-search](skills/patent-search/) | innojoy + Google Patents 自动化检索、检索式设计、对比文件分级、新颖性/创造性评估、交底书撰写 | ⚠️ **需公司账号**（innojoy 登录凭据自行配置） |
+| 1 | [patent-search](skills/patent-search/) | innojoy + Google Patents 自动化检索、检索式设计、对比文件分级、新颖性/创造性评估、交底书撰写 | ⚠️ **需 innojoy 账号**（登录凭据自行配置） |
 | 2 | [book-to-skill](skills/book-to-skill/) | 把 PDF / EPUB / DOCX / HTML / Markdown 等文档提炼成可复用的 agent 技能（框架、心智模型、原则、反模式），附完整 Python 工具链 | 开源项目技能化（MIT，原作者保留版权）；**上游 [virgiliojr94/book-to-skill](https://github.com/virgiliojr94/book-to-skill)** |
 | 3 | [web-scraping](skills/web-scraping/) | 任意网页抓取整理为 Markdown：探测 SSR/API、处理限流（-509 等）、CDP 复用 Chrome 登录态、图片本地化 | 基于 B 站专栏文集实战（22 篇、1912 张图、0 失败）；wbi 签名参考 [MediaCrawler](https://github.com/NanmiCoder/MediaCrawler)（自行拉取） |
 | 4 | [image-ocr-to-docs](skills/image-ocr-to-docs/) | 批量图片 OCR 转可检索文档：PaddleOCR + 放大预处理，输出同名 .md 或汇总清单，含双引擎交叉验证 | 纯本地推理，数据不出内网 |
@@ -96,7 +96,7 @@ reasonix-skills/
 
 ## ⚠️ 重要提示
 
-- **patent-search** 需要公司 innojoy 账号，请在**公司网络环境**下使用，凭据不要提交到任何仓库。
+- **patent-search** 需要 innojoy 账号，登录凭据自行配置，凭据不要提交到任何仓库。
 - **web-scraping** 涉及网页抓取，请遵守目标站点服务条款与所在地区法规；MediaCrawler 参考项目请从 [官方仓库](https://github.com/NanmiCoder/MediaCrawler) 拉取（本仓库不附带其代码）。
 - **image-ocr-to-docs / book-to-skill** 首次使用需安装 Python 依赖，详见各技能 SKILL.md。
 - **onenote-to-obsidian** 仅 Windows（依赖 OneNote 桌面版 COM API）。
