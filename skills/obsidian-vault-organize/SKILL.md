@@ -83,9 +83,10 @@ python "<技能目录>/scripts/check_links.py" <vault>
 
 ## 脚本位置
 
-本技能自带两个脚本（Python 3，标准库）：
+本技能自带三个脚本（Python 3，标准库）：
 - `scripts/check_links.py` — 断链校验（也用于任何时刻的健康检查，不限于移动后）
-- `scripts/relink.py` — 移动/重命名后重写引用
+- `scripts/relink.py` — 移动/重命名后重写引用（old→new 路径映射）
+- `scripts/fix_broken_links.py` — 按文件名修复"文件被移走后断掉的附件引用"（图片/PDF 等；断链引用在全库找同名文件 → 改写为 `![[路径]]` 嵌入；找不到的记入缺失清单不动；笔记引用（.md/无扩展名）不处理）
 
 技能目录查找：`glob("**/obsidian-vault-organize/scripts/*.py")`；典型安装位置 `%APPDATA%\reasonix\skills\obsidian-vault-organize\scripts\`（Windows）或 `~/.reasonix/skills/obsidian-vault-organize/scripts/`（Linux/macOS）。
 
