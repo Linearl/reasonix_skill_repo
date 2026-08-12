@@ -1,0 +1,31 @@
+{
+  "status": "pass",
+  "mode": "interactive",
+  "config": {
+    "config_file": "config/execution.yaml",
+    "effective_config_file": "effective_config.yaml",
+    "schema_file": "config/execution.schema.json"
+  },
+  "summary": {
+    "fixed": 0,
+    "skipped": 0,
+    "remaining": 0,
+    "gate": "pass"
+  },
+  "quality": {
+    "tests": "pass",
+    "format": "pass",
+    "perf_regression_pct": 0,
+    "perf_threshold_pct": 5
+  },
+  "blocking_reasons": [
+    
+  ],
+  "artifacts": {
+    "report": "docs/analysis/xx-code_review_YYYY_MM_DD.md",
+    "decision_log": "decision_log.md",
+    "skip_log": "skipped/skip_log.md",
+    "debt_backlog": "skipped/debt_backlog.md"
+  },
+  "timestamp": "YYYY-MM-DDTHH:mm:ss"
+}

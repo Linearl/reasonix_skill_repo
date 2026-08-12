@@ -1,0 +1,129 @@
+/* ===== Design Tokens ===== */
+
+/* Shared (non-theme) */
+:root {
+  --font-main: "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", "Helvetica Neue", sans-serif;
+  --font-code: "Cascadia Code", "Fira Code", "Source Code Pro", "Microsoft YaHei UI", "Consolas", monospace;
+  --radius-xl: 28px;
+  --radius-lg: 22px;
+  --radius-md: 18px;
+  --radius-sm: 14px;
+  --panel-pad: 1.05rem;
+  --transition-fast: 220ms ease;
+}
+
+/* ===== Dark theme (default) ===== */
+:root, [data-theme="dark"] {
+  --bg: #07111f;
+  --bg-deep: #040914;
+  --surface-1: rgba(13, 24, 40, 0.92);
+  --surface-2: rgba(20, 34, 56, 0.78);
+  --surface-3: rgba(35, 55, 86, 0.58);
+  --glass-bg: rgba(255, 255, 255, 0.04);
+  --glass-bd: rgba(255, 255, 255, 0.08);
+  --text: #eef4ff;
+  --text-sec: #b9c7e6;
+  --text-faint: #8393b5;
+  --status: #d8e4ff;
+  --accent: #8ec5ff;
+  --accent-strong: #4ea1ff;
+  --accent-soft: rgba(142, 197, 255, 0.18);
+  --brand: #89f0ff;
+  --ok: #62e3b0;
+  --warn: #ffd27a;
+  --risk: #ff8f9f;
+  --info: #a48cff;
+  --tip-bg: rgba(98, 227, 176, 0.12);
+  --tip-bd: rgba(98, 227, 176, 0.34);
+  --shadow-soft: 0 18px 44px rgba(0, 0, 0, 0.28);
+  --shadow-strong: 0 28px 72px rgba(0, 0, 0, 0.42);
+  --texture-grid: rgba(142, 197, 255, 0.08);
+  --code-bg: #0a1627;
+  --focus-ring: #f7d66a;
+
+  /* Overlay & border tokens (white direction for dark theme) */
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-soft: rgba(255, 255, 255, 0.04);
+  --surface-glass: rgba(255, 255, 255, 0.04);
+  --surface-glow: rgba(255, 255, 255, 0.015);
+  --surface-hover: rgba(255, 255, 255, 0.08);
+  --row-stripe: rgba(255, 255, 255, 0.015);
+  --row-line: rgba(255, 255, 255, 0.05);
+
+  /* Background gradients */
+  --bg-gradient-body:
+    radial-gradient(circle at 10% 10%, rgba(142, 197, 255, 0.18), transparent 26%),
+    radial-gradient(circle at 86% 12%, rgba(137, 240, 255, 0.14), transparent 18%),
+    radial-gradient(circle at 50% 100%, rgba(98, 227, 176, 0.09), transparent 26%),
+    linear-gradient(180deg, #08111d 0%, #06101a 42%, #040812 100%);
+
+  --bg-gradient-deck:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01)),
+    linear-gradient(140deg, rgba(12, 22, 38, 0.98), rgba(5, 10, 18, 0.98));
+
+  --bg-gradient-slide:
+    radial-gradient(circle at 12% 10%, rgba(142, 197, 255, 0.12), transparent 22%),
+    radial-gradient(circle at 84% 16%, rgba(137, 240, 255, 0.1), transparent 18%),
+    linear-gradient(180deg, rgba(13, 24, 40, 0.96), rgba(5, 10, 18, 0.96));
+
+  /* Sticky header bg for tables */
+  --sticky-bg: #0d182c;
+}
+
+/* ===== Light theme ===== */
+[data-theme="light"] {
+  --bg: #f4f7fa;
+  --bg-deep: #e8ecf4;
+  --surface-1: rgba(255, 255, 255, 0.92);
+  --surface-2: rgba(240, 244, 250, 0.78);
+  --surface-3: rgba(225, 232, 242, 0.58);
+  --glass-bg: rgba(0, 0, 0, 0.03);
+  --glass-bd: rgba(0, 0, 0, 0.08);
+  --text: #1a2332;
+  --text-sec: #4a5d7a;
+  --text-faint: #7a8da8;
+  --status: #3a5080;
+  --accent: #2b6cb0;
+  --accent-strong: #1a5a9a;
+  --accent-soft: rgba(43, 108, 176, 0.12);
+  --brand: #0d7c8a;
+  --ok: #1a7d4c;
+  --warn: #b8760e;
+  --risk: #c53030;
+  --info: #5a3fc0;
+  --tip-bg: rgba(26, 125, 76, 0.1);
+  --tip-bd: rgba(26, 125, 76, 0.28);
+  --shadow-soft: 0 12px 32px rgba(0, 0, 0, 0.08);
+  --shadow-strong: 0 18px 48px rgba(0, 0, 0, 0.12);
+  --texture-grid: rgba(43, 108, 176, 0.06);
+  --code-bg: #e8ecf5;
+  --focus-ring: #d4a00a;
+
+  /* Overlay & border tokens (black direction for light theme) */
+  --border-subtle: rgba(0, 0, 0, 0.08);
+  --border-soft: rgba(0, 0, 0, 0.04);
+  --surface-glass: rgba(0, 0, 0, 0.03);
+  --surface-glow: rgba(0, 0, 0, 0.01);
+  --surface-hover: rgba(0, 0, 0, 0.05);
+  --row-stripe: rgba(0, 0, 0, 0.02);
+  --row-line: rgba(0, 0, 0, 0.06);
+
+  /* Background gradients */
+  --bg-gradient-body:
+    radial-gradient(circle at 10% 10%, rgba(43, 108, 176, 0.12), transparent 26%),
+    radial-gradient(circle at 86% 12%, rgba(13, 124, 138, 0.1), transparent 18%),
+    radial-gradient(circle at 50% 100%, rgba(26, 125, 76, 0.06), transparent 26%),
+    linear-gradient(180deg, #f4f7fa 0%, #eef1f7 42%, #e8ecf4 100%);
+
+  --bg-gradient-deck:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.02), rgba(0, 0, 0, 0.01)),
+    linear-gradient(140deg, rgba(248, 250, 254, 0.98), rgba(232, 236, 244, 0.98));
+
+  --bg-gradient-slide:
+    radial-gradient(circle at 12% 10%, rgba(43, 108, 176, 0.08), transparent 22%),
+    radial-gradient(circle at 84% 16%, rgba(13, 124, 138, 0.06), transparent 18%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(240, 244, 250, 0.96));
+
+  /* Sticky header bg for tables */
+  --sticky-bg: #e8ecf5;
+}

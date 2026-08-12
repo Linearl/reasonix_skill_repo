@@ -1,0 +1,81 @@
+/* ===== Design Tokens: Dark Theme (暗色蓝轴) ===== */
+
+/* Shared (non-theme) */
+:root {
+  --font-main: "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", "Helvetica Neue", sans-serif;
+  --font-code: "Cascadia Code", "Fira Code", "Source Code Pro", "Microsoft YaHei UI", "Consolas", monospace;
+  --radius-xl: 28px;
+  --radius-lg: 22px;
+  --radius-md: 18px;
+  --radius-sm: 14px;
+  --panel-pad: 1.05rem;
+  --transition-fast: 220ms ease;
+}
+
+/* ===== Dark theme ===== */
+:root, [data-theme="dark"] {
+  --bg: #0b1020;
+  --bg-deep: #070c18;
+  --surface-1: rgba(18, 26, 48, 0.94);
+  --surface-2: rgba(24, 36, 67, 0.82);
+  --surface-3: rgba(32, 48, 86, 0.62);
+  --glass-bg: rgba(110, 168, 255, 0.04);
+  --glass-bd: rgba(110, 168, 255, 0.08);
+  --text: #e8eefc;
+  --text-sec: #aeb8d6;
+  --text-faint: #7d8aac;
+  --status: #c8d4f0;
+  --accent: #36d399;
+  --accent-strong: #4ee6af;
+  --accent-soft: rgba(54, 211, 153, 0.15);
+  --brand: #6ea8ff;
+  --ok: #36d399;
+  --warn: #f6c177;
+  --risk: #ff7b8a;
+  --info: #8facff;
+  --tip-bg: rgba(54, 211, 153, 0.1);
+  --tip-bd: rgba(54, 211, 153, 0.28);
+  --shadow-soft: 0 14px 36px rgba(0, 0, 0, 0.28);
+  --shadow-strong: 0 24px 60px rgba(0, 0, 0, 0.44);
+  --texture-grid: rgba(110, 168, 255, 0.06);
+  --code-bg: #0a1224;
+  --focus-ring: #ffd166;
+
+  /* Overlay & border tokens */
+  --border-subtle: rgba(43, 58, 100, 0.5);
+  --border-soft: rgba(43, 58, 100, 0.3);
+  --surface-glass: rgba(110, 168, 255, 0.04);
+  --surface-glow: rgba(110, 168, 255, 0.012);
+  --surface-hover: rgba(110, 168, 255, 0.08);
+  --row-stripe: rgba(110, 168, 255, 0.02);
+  --row-line: rgba(110, 168, 255, 0.05);
+
+  /* Background gradients */
+  --bg-gradient-body:
+    radial-gradient(circle at top left, rgba(110, 168, 255, 0.15), transparent 28%),
+    radial-gradient(circle at 82% 10%, rgba(93, 228, 255, 0.12), transparent 24%),
+    linear-gradient(180deg, #08101f 0%, #0b1020 48%, #070c18 100%);
+
+  --bg-gradient-deck:
+    linear-gradient(180deg, rgba(110, 168, 255, 0.02), rgba(110, 168, 255, 0.01)),
+    linear-gradient(140deg, rgba(11, 16, 32, 0.98), rgba(7, 12, 24, 0.98));
+
+  --bg-gradient-slide:
+    radial-gradient(circle at 12% 14%, rgba(110, 168, 255, 0.14), transparent 28%),
+    radial-gradient(circle at 84% 16%, rgba(93, 228, 255, 0.1), transparent 22%),
+    linear-gradient(180deg, rgba(18, 26, 48, 0.97), rgba(9, 15, 30, 0.97));
+
+  /* Sticky header bg for tables */
+  --sticky-bg: #121a30;
+
+  /* Compat aliases */
+  --panel: rgba(18, 26, 48, 0.94);
+  --panel-soft: rgba(24, 36, 67, 0.72);
+  --border: #2b3a64;
+  --muted: #aeb8d6;
+  --shadow: 0 22px 48px rgba(0, 0, 0, 0.34);
+  --radius: 20px;
+  --line: rgba(43, 58, 100, 0.5);
+  --cyan: #5de4ff;
+  --focus: #ffd166;
+}

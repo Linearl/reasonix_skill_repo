@@ -1,0 +1,236 @@
+/* ===== Cards & Panels ===== */
+.panel, .card {
+  background: linear-gradient(180deg, var(--surface-glass), var(--surface-glow));
+  box-shadow: inset 0 0 0 1px var(--border-soft), var(--shadow-soft);
+  border-radius: var(--radius-md);
+  padding: var(--panel-pad);
+}
+.panel h3, .panel h4, .card h3, .card h4 {
+  margin: 0 0 0.4rem; color: var(--text); font-size: var(--text-md);
+}
+.panel p, .panel li, .card p, .card li {
+  margin: 0; color: var(--text-sec); line-height: 1.62; font-size: var(--text-md);
+}
+.panel > strong, .card > strong {
+  display: block; margin-bottom: 0.35rem; color: var(--text); font-size: var(--text-lg);
+}
+
+/* ===== Chips ===== */
+.eyebrow, .chip, .section-tag, .tag {
+  display: inline-flex; align-items: center; gap: 0.38rem;
+  border-radius: 999px; line-height: 1; white-space: nowrap;
+  background: var(--accent-soft); color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--border-soft);
+  font-weight: 700; padding: 0.42rem 0.74rem; font-size: var(--text-sm);
+}
+.mini-chip {
+  display: inline-flex; align-items: center; gap: 0.38rem;
+  border-radius: 999px; line-height: 1; white-space: nowrap;
+  background: var(--accent-soft); color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--border-soft);
+  font-weight: 700; padding: 0.34rem 0.62rem; font-size: var(--text-xs);
+}
+
+.page-chip {
+  display: inline-flex; align-items: center; gap: 0.38rem;
+  border-radius: 999px; line-height: 1; white-space: nowrap;
+  padding: 0.42rem 0.74rem;
+  background: var(--surface-hover); color: var(--status);
+  font-size: var(--text-sm); font-weight: 800; letter-spacing: 0.06em;
+}
+
+/* ===== Utility classes ===== */
+.muted    { color: var(--text-faint); }
+.emphasis { color: var(--brand); font-weight: 800; }
+.ok       { color: var(--ok); font-weight: 700; }
+.warn     { color: var(--warn); font-weight: 700; }
+.risk     { color: var(--risk); font-weight: 700; }
+.info     { color: var(--info); font-weight: 700; }
+.code     { font-family: var(--font-code); background: var(--code-bg); padding: 0.12rem 0.4rem; border-radius: 8px; }
+
+/* ===== Base Table ===== */
+.table-wrap {
+  border-radius: var(--radius-md, 18px); overflow: auto;
+  border: 1px solid var(--border-soft);
+}
+table {
+  width: 100%; border-collapse: collapse; font-size: var(--text-md);
+}
+thead th, table > tr:first-child th {
+  text-align: left; padding: 0.7rem 0.85rem;
+  background: rgba(142,197,255,0.14); color: var(--accent);
+  font-weight: 700; font-size: var(--text-sm); letter-spacing: 0.03em;
+  border-bottom: 2px solid var(--border-soft);
+}
+tbody td, table > tr:not(:first-child) td {
+  padding: 0.7rem 0.85rem; color: var(--text-sec); line-height: 1.6;
+  border-top: 1px solid var(--border-soft);
+  vertical-align: top;
+}
+tbody tr:first-child td, table > tr:nth-child(2) td { border-top: none; }
+tbody tr:nth-child(even) td, table > tr:nth-child(even):not(:first-child) td { background: var(--row-stripe); }
+tbody td:first-child, table > tr:not(:first-child) td:first-child { color: var(--text); font-weight: 600; white-space: nowrap; }
+tbody td strong, table > tr:not(:first-child) td strong { color: var(--text); }
+
+/* ===== Quote box ===== */
+.quote-box {
+  padding: 0.7rem 1rem;
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, var(--surface-glass), var(--surface-glow));
+  box-shadow: inset 0 0 0 1px var(--border-soft), var(--shadow-soft);
+}
+.quote-box p, .quote-box blockquote {
+  margin: 0; color: var(--text); font-size: var(--text-md); line-height: 1.65;
+}
+
+/* ===== Tip card / Tip box ===== */
+.tip-card, .tip-box {
+  padding: 0.85rem 1rem; border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, var(--tip-bg), var(--surface-glass));
+  box-shadow: inset 0 0 0 1px var(--tip-bd), var(--shadow-soft);
+  color: var(--text); line-height: 1.6; font-size: var(--text-sm);
+}
+.tip-card > strong { display: block; margin-bottom: 0.25rem; font-size: var(--text-lg); }
+
+/* ===== Formula block ===== */
+.formula-block {
+  text-align: center; padding: 0.55rem 0.8rem;
+  background: linear-gradient(180deg, rgba(78,161,255,0.16), rgba(137,240,255,0.08));
+  border-radius: var(--radius-lg);
+  box-shadow: inset 0 0 0 1px var(--border-soft), var(--shadow-soft);
+}
+.formula-block .formula {
+  font-family: var(--font-code); font-size: var(--text-xl);
+  font-weight: 800; color: var(--brand); letter-spacing: 0.04em; margin-bottom: 0.3rem;
+}
+.formula-block .formula-sub {
+  color: var(--text-sec); font-size: var(--text-sm); line-height: 1.5;
+}
+
+/* ===== Highlight box ===== */
+.highlight-box {
+  padding: 0.55rem 0.85rem;
+  border-radius: var(--radius-md);
+  background: rgba(78,161,255,0.1);
+  border: 1px solid rgba(78,161,255,0.2);
+  font-size: var(--text-sm); color: var(--text); line-height: 1.55;
+}
+.highlight-box > strong { display: block; margin-bottom: 0.2rem; font-size: var(--text-lg); }
+
+/* ===== Dual column ===== */
+.dual-col {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem;
+}
+.dual-col-sm {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;
+}
+
+/* ===== Vertical stack ===== */
+.vstack {
+  display: grid; gap: 0.35rem; align-content: start;
+}
+.vstack-sm {
+  display: grid; gap: 0.25rem; align-content: start;
+}
+
+/* ===== Card grid 4 ===== */
+.card-grid-4 {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.45rem;
+}
+
+/* ===== Step card ===== */
+.step-card {
+  padding: 0.45rem 0.6rem;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(180deg, var(--surface-glass), var(--surface-glow));
+  box-shadow: inset 0 0 0 1px var(--border-soft), var(--shadow-soft);
+  display: flex; flex-direction: column; align-items: flex-start; gap: 0.2rem;
+}
+
+/* ===== Insight card (accent left border) ===== */
+.insight-card {
+  padding: 1rem 1.2rem; border-radius: var(--radius-lg);
+  background: var(--accent-soft);
+  border-left: 4px solid var(--accent-strong);
+  box-shadow: inset 0 0 0 1px var(--border-subtle), var(--shadow-soft);
+  color: var(--text); line-height: 1.7;
+}
+
+/* ===== Flow step (numbered circle) ===== */
+.step-flow { display: grid; gap: 0.55rem; }
+.flow-step {
+  display: grid; grid-template-columns: 2.2rem 1fr; gap: 0.7rem; align-items: start;
+  padding: var(--panel-pad);
+  background: linear-gradient(180deg, var(--border-soft), var(--surface-glow));
+  box-shadow: inset 0 0 0 1px var(--border-soft), var(--shadow-soft);
+  border-radius: var(--radius-md);
+}
+.flow-step .step-no {
+  width: 2.2rem; height: 2.2rem; border-radius: 50%;
+  display: grid; place-items: center;
+  font-family: var(--font-code); font-size: var(--text-sm); font-weight: 800;
+  color: var(--bg, #07111f);
+  background: linear-gradient(135deg, var(--accent), var(--brand));
+  box-shadow: 0 8px 22px rgba(78,161,255,0.2);
+}
+.flow-step .step-body strong { display: block; margin-bottom: 0.15rem; font-size: var(--text-lg); }
+.flow-step .step-body p { margin: 0; color: var(--text-sec); font-size: var(--text-sm); line-height: 1.55; }
+
+/* ===== Stat card (centered metric) ===== */
+.stat-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.7rem; }
+.stat-card {
+  text-align: center; min-height: 6rem;
+  display: grid; align-content: center; gap: 0.2rem;
+  background: linear-gradient(180deg, var(--border-soft), var(--surface-glow));
+  box-shadow: inset 0 0 0 1px var(--border-soft), var(--shadow-soft);
+  border-radius: var(--radius-md); padding: var(--panel-pad);
+}
+.stat-card .stat-value {
+  font-family: var(--font-code); font-size: var(--text-xl);
+  font-weight: 800; color: var(--risk); line-height: 1;
+}
+.stat-card .stat-label { color: var(--text-sec); font-size: var(--text-sm); }
+
+/* ===== Flowchart ===== */
+.flowchart { display: grid; gap: 0.28rem; font-size: var(--text-sm); }
+.flow-node {
+  padding: 0.4rem 0.6rem; border-radius: var(--radius-sm);
+  background: var(--surface-glass); color: var(--text-sec); line-height: 1.5;
+}
+.flow-node.q { color: var(--brand); font-weight: 700; }
+.flow-node.answer { padding-left: 1.6rem; color: var(--accent); font-weight: 600; }
+
+/* ===== Glass row ===== */
+.glass-row {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem;
+  padding: 0.95rem 1.1rem; border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, var(--border-soft), var(--surface-glow));
+  box-shadow: inset 0 0 0 1px var(--border-subtle), var(--shadow-soft);
+}
+.glass-row .glass-label { font-size: var(--text-sm); color: var(--accent); font-weight: 700; margin-bottom: 0.4rem; }
+.glass-row .glass-desc { color: var(--text-sec); font-size: var(--text-sm); line-height: 1.55; }
+
+/* ===== Big stat ===== */
+.big-stat-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.8rem; }
+.big-stat {
+  text-align: center; padding: 1rem; border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, rgba(137,240,255,0.08), var(--surface-glow));
+  box-shadow: inset 0 0 0 1px var(--border-soft), var(--shadow-soft);
+}
+.big-stat .big-num {
+  font-family: var(--font-code); font-size: var(--text-xl);
+  font-weight: 800; color: var(--brand); line-height: 1;
+}
+.big-stat .big-desc { color: var(--text-sec); font-size: var(--text-sm); margin-top: 0.3rem; }
+
+/* ===== Additional layout grids ===== */
+.card-grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.7rem; }
+.card-grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.7rem; }
+.path-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem; }
+
+/* ===== Highlight text ===== */
+.hl-accent { color: var(--accent-strong); font-weight: 700; }
+.hl-warn   { color: var(--warn); font-weight: 700; }
+.hl-brand  { color: var(--brand); font-weight: 700; }
+.hl-ok     { color: var(--ok); font-weight: 700; }
+.hl-risk   { color: var(--risk); font-weight: 700; }

@@ -1,0 +1,19 @@
+{
+  "log": {
+    "autoSaveIntervalMs": 30000,
+    "maxEntriesPerFile": 2000
+  },
+  "editor": {
+    "panelWidth": 300,
+    "autoSaveOnDeactivate": false,
+    "confirmBeforeExit": true,
+    "maxUndoStack": 50
+  },
+  "components": {
+    "customTemplates": []
+  },
+  "server": {
+    "port": 8080,
+    "autoOpenBrowser": true
+  }
+}

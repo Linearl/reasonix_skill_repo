@@ -1,0 +1,9 @@
+/* ===== Font Size: 大字号 ===== */
+/* 全部 +4px */
+[data-font-size="large"] {
+  --text-xs: 0.97rem;
+  --text-sm: 1.07rem;
+  --text-md: 1.2rem;
+  --text-lg: 1.35rem;
+  --text-xl: clamp(1.4rem, 2.1vw, 1.75rem);
+}

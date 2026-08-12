@@ -1,0 +1,12 @@
+{
+  "title": "演示标题",
+  "parts": {
+    "ch01": "第一章名称",
+    "ch02": "第二章名称"
+  },
+  "partOrder": ["ch01", "ch02"],
+  "slides": [
+    { "part": "ch01", "file": "01-cover.html", "title": "封面" },
+    { "part": "ch01", "file": "02-overview.html", "title": "概述" }
+  ]
+}

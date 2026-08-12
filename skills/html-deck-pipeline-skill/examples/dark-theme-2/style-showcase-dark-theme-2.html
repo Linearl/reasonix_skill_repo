@@ -1,0 +1,691 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dark Theme 2 风格示例-合并(v-02)</title>
+  <link rel="stylesheet" href="css/tokens.css" />
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/components.css" />
+  <style>
+    /* ===== Page-specific layouts ===== */
+
+    /* Cover */
+    .layout-cover {
+      background:
+        radial-gradient(circle at 18% 20%, rgba(78,161,255,0.26), transparent 28%),
+        radial-gradient(circle at 78% 18%, rgba(137,240,255,0.16), transparent 18%),
+        radial-gradient(circle at 82% 76%, rgba(164,140,255,0.14), transparent 18%),
+        linear-gradient(180deg, rgba(8,18,32,0.98), rgba(4,9,20,0.98));
+    }
+    .cover-body { display: grid; grid-template-columns: 1.12fr 0.88fr; gap: 1rem; align-items: stretch; }
+    .cover-copy { display: grid; gap: 1rem; align-content: space-between; }
+    .cover-title { margin: 0.55rem 0 0.7rem; font-size: clamp(2.6rem,4.8vw,4.8rem); line-height: 1.1; letter-spacing: 0.01em; }
+    .cover-lede { margin: 0; max-width: 44rem; color: var(--text-sec); font-size: 1.10rem; line-height: 1.72; }
+    .cover-side { display: grid; gap: 0.9rem; align-content: end; }
+
+    /* Navigation */
+    .layout-navigation .nav-body { display: grid; grid-template-columns: 1.45fr 0.92fr; gap: 1rem; }
+    .route-rail { display: grid; gap: 0.85rem; align-content: start; }
+    .nav-side { display: grid; gap: 0.9rem; align-content: start; }
+
+    /* Process */
+    .layout-process .process-body { display: grid; grid-template-columns: 1.08fr 0.92fr; gap: 1rem; }
+    .lane-stack { display: grid; gap: 0.9rem; align-content: start; }
+    .lane { display: grid; grid-template-columns: 9rem 1fr; gap: 1rem; align-items: start; }
+    .lane-label { display: grid; gap: 0.36rem; }
+    .lane-label .lane-id { font-family: var(--font-code); color: var(--brand); font-weight: 800; font-size: 0.82rem; letter-spacing: 0.05em; }
+    .lane-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; }
+    .process-side { display: grid; gap: 0.9rem; align-content: start; }
+
+    /* Evidence */
+    .layout-evidence .evidence-body { display: grid; gap: 1rem; }
+    .evidence-grid { grid-template-columns: 1.15fr 1fr; }
+
+    /* Compare */
+    .layout-compare .compare-body { display: grid; grid-template-columns: 1.05fr 1.05fr 0.9fr; gap: 1rem; }
+    .compare-card { display: grid; gap: 0.75rem; min-height: 22rem; }
+
+    /* Action */
+    .layout-action .action-body { display: grid; grid-template-columns: 1.18fr 0.82fr; gap: 1rem; }
+    .action-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+    /* Closing */
+    .layout-closing {
+      background:
+        radial-gradient(circle at 14% 18%, rgba(98,227,176,0.16), transparent 20%),
+        radial-gradient(circle at 84% 18%, rgba(142,197,255,0.14), transparent 18%),
+        linear-gradient(180deg, rgba(10,19,32,0.98), rgba(4,9,20,0.98));
+    }
+    .closing-body { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 1rem; align-items: stretch; }
+    .summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .closing-grid { align-content: end; }
+    .closing-quote { margin: 0; color: var(--text); font-size: clamp(1.5rem,2.4vw,2.2rem); line-height: 1.42; }
+    .closing-line { margin: 0; color: var(--text-sec); font-size: 0.95rem; line-height: 1.7; }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#maincontent">跳到主要内容</a>
+  <div id="liveRegion" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+
+  <header class="site-header">
+    <div class="site-kicker">
+      <strong>Dark Theme 2 · Midnight Rail No-Border</strong>
+      <span>深色、无边框、7 页高密度示例：封面 / 导航 / 流程 / 证据 / 对比 / 行动 / 底页</span>
+    </div>
+    <div class="site-note">示例主题：把“日常工作里的 AI 协作技巧”讲成一套可执行、可验证、可复用的组内分享 deck。</div>
+  </header>
+
+  <main id="maincontent" tabindex="-1">
+    <div class="deck-shell">
+      <div class="deck" aria-label="Dark Theme 2 风格展示讲稿">
+        <section class="slide active layout-cover mode-cover" data-index="0" aria-labelledby="slide-0-title">
+          <div class="slide-head">
+            <span class="eyebrow">P1 · 封面</span>
+            <span class="page-chip" aria-label="第 1 页，共 7 页">01 / 07</span>
+          </div>
+          <div class="cover-body">
+            <div class="cover-copy">
+              <div>
+                <div class="tag-row">
+                  <span class="chip">组内分享</span>
+                  <span class="chip">AI 协作</span>
+                  <span class="chip">可执行方法</span>
+                </div>
+                <h1 id="slide-0-title" class="cover-title">大模型在日常工作中的应用技巧</h1>
+                <p class="cover-lede">不是“会不会用”，而是<span class="emphasis">怎样把 AI 变成稳定产出</span>：让问题更早澄清、方案更快对比、验证更少返工、沉淀更像制度。</p>
+              </div>
+              <div class="quote-box">
+                <p>一句话定位：<span class="ok">先把问题问对</span>，再把工作拆对，最后把判断权留在人手里——AI 才不会把效率变成返工。</p>
+              </div>
+            </div>
+            <aside class="cover-side" aria-label="封面摘要">
+              <div class="mini-grid">
+                <article class="metric">
+                  <strong>分享结构</strong>
+                  <span class="metric-value">7 页</span>
+                  <span class="metric-sub">从路径到动作完整闭环</span>
+                </article>
+                <article class="metric">
+                  <strong>核心动作</strong>
+                  <span class="metric-value">3 步</span>
+                  <span class="metric-sub">澄清 → 对比 → 验证</span>
+                </article>
+                <article class="metric">
+                  <strong>协作约束</strong>
+                  <span class="metric-value">1 份</span>
+                  <span class="metric-sub">统一输入与验收口径</span>
+                </article>
+                <article class="metric">
+                  <strong>会后目标</strong>
+                  <span class="metric-value">72h</span>
+                  <span class="metric-sub">产出团队最小实践清单</span>
+                </article>
+              </div>
+              <article class="panel">
+                <h3>适合谁看</h3>
+                <ul>
+                  <li>需要写方案、做分析、跑流程、协同交付的人。</li>
+                  <li>经常遇到“AI 很快，但结果不稳”的团队。</li>
+                  <li>想把个人技巧升级成团队协议的负责人。</li>
+                </ul>
+              </article>
+            </aside>
+          </div>
+          <div class="slide-foot">
+            <span>深色沉浸 + 无边框分层 + 大标题封面</span>
+            <span>主题先立住，再讲方法</span>
+          </div>
+        </section>
+
+        <section class="slide layout-navigation mode-route" data-index="1" aria-labelledby="slide-1-title">
+          <div class="slide-head">
+            <span class="eyebrow">P2 · 导航</span>
+            <span class="page-chip" aria-label="第 2 页，共 7 页">02 / 07</span>
+          </div>
+          <div class="nav-body">
+            <div class="route-rail">
+              <div>
+                <span class="chip">阅读路径</span>
+                <h2 id="slide-1-title" class="slide-title">从“会用工具”切到“会组织工作流”</h2>
+                <p class="slide-lede">导航页要帮观众先拿到地图：今天不是讲零散技巧，而是讲一条从问题输入、执行过程到团队收口的路线。</p>
+              </div>
+              <article class="route-stage">
+                <div class="stage-no">01</div>
+                <div class="stage-copy">
+                  <strong>先把问题框清楚</strong>
+                  <p>背景、目标、约束、验收四件套先说全，避免 AI 在模糊空间里自由发挥。</p>
+                </div>
+                <div class="stage-check">起点</div>
+              </article>
+              <article class="route-stage">
+                <div class="stage-no">02</div>
+                <div class="stage-copy">
+                  <strong>再把方案拉开差异</strong>
+                  <p>让 AI 同时给出候选路径、边界条件和适用场景，不要只拿一个答案就匆忙开工。</p>
+                </div>
+                <div class="stage-check">分流</div>
+              </article>
+              <article class="route-stage">
+                <div class="stage-no">03</div>
+                <div class="stage-copy">
+                  <strong>最后把验证前置</strong>
+                  <p>先写测试口径、校验命令、回退条件，再让 AI 参与修改，这样快得更稳。</p>
+                </div>
+                <div class="stage-check">收口</div>
+              </article>
+            </div>
+            <aside class="nav-side">
+              <article class="panel">
+                <h3>本次 7 页怎么分工</h3>
+                <ul>
+                  <li>P1：让主题和价值立刻可复述。</li>
+                  <li>P2：给路线图，降低听众迷路概率。</li>
+                  <li>P3~P6：分别回答“怎么做、凭什么、为什么改、做什么”。</li>
+                  <li>P7：把结论回收成会后动作。</li>
+                </ul>
+              </article>
+              <div class="tip-card" role="note" aria-label="阅读提示">
+                <strong>推荐阅读顺序</strong>
+                先看 P3 的流程，再看 P4 的证据和 P5 的取舍，最后到 P6 直接拿行动清单。这样不会被“漂亮观点”提前带偏。
+              </div>
+              <article class="panel">
+                <h3>这页要解决的痛点</h3>
+                <p>很多分享一开场就灌观点，听众像被推上跑步机。导航页的任务，是先把路灯打开。</p>
+              </article>
+            </aside>
+          </div>
+          <div class="slide-foot">
+            <span>路径轨道 + 说明侧栏</span>
+            <span>先给地图，再讲细节</span>
+          </div>
+        </section>
+
+        <section class="slide layout-process mode-flow" data-index="2" aria-labelledby="slide-2-title">
+          <div class="slide-head">
+            <span class="eyebrow">P3 · 流程</span>
+            <span class="page-chip" aria-label="第 3 页，共 7 页">03 / 07</span>
+          </div>
+          <div class="process-body">
+            <div class="lane-stack">
+              <div>
+                <span class="chip">执行闭环</span>
+                <h2 id="slide-2-title" class="slide-title">把 AI 协作拆成“输入层、决策层、验证层”三条泳道</h2>
+                <p class="slide-lede">流程页不只说明顺序，还要说明谁做判断、何时停下来、哪里需要回滚。否则流程图只是艺术体操。</p>
+              </div>
+              <article class="lane">
+                <div class="lane-label">
+                  <span class="lane-id">INPUT</span>
+                  <strong>输入层</strong>
+                  <p class="muted">先让问题变具体</p>
+                </div>
+                <div class="lane-grid">
+                  <article class="step">
+                    <div class="step-head"><span class="step-no">S1</span><span class="step-state">必做</span></div>
+                    <strong>补齐四段输入</strong>
+                    <p>把背景、目标、约束、验收标准写成明文，避免 AI 在空白地带乱长枝叶。</p>
+                  </article>
+                  <article class="step">
+                    <div class="step-head"><span class="step-no">S2</span><span class="step-state">必做</span></div>
+                    <strong>声明信息来源</strong>
+                    <p>告诉 AI 可用文档、代码区、外部数据源与不可信内容边界。</p>
+                  </article>
+                  <article class="step">
+                    <div class="step-head"><span class="step-no">S3</span><span class="step-state">可选</span></div>
+                    <strong>列出失败信号</strong>
+                    <p>先写“什么算错”，生成结果才知道往哪儿收敛。</p>
+                  </article>
+                </div>
+              </article>
+              <article class="lane">
+                <div class="lane-label">
+                  <span class="lane-id">DECIDE</span>
+                  <strong>决策层</strong>
+                  <p class="muted">让差异显式出现</p>
+                </div>
+                <div class="lane-grid">
+                  <article class="step">
+                    <div class="step-head"><span class="step-no">S4</span><span class="step-state">重点</span></div>
+                    <strong>让 AI 给候选方案</strong>
+                    <p>至少要求 2~3 条路径，附上适用场景、风险点与代价。</p>
+                  </article>
+                  <article class="step">
+                    <div class="step-head"><span class="step-no">S5</span><span class="step-state">重点</span></div>
+                    <strong>人工拍板关键选择</strong>
+                    <p>是否继续、删什么、改哪里，这些判断必须留给人，不外包给随机性。</p>
+                  </article>
+                  <article class="step">
+                    <div class="step-head"><span class="step-no">S6</span><span class="step-state">提醒</span></div>
+                    <strong>控制修改范围</strong>
+                    <p>一次只改一个逻辑区，降低“修一处炸三处”的连锁反应。</p>
+                  </article>
+                </div>
+              </article>
+              <article class="lane">
+                <div class="lane-label">
+                  <span class="lane-id">VERIFY</span>
+                  <strong>验证层</strong>
+                  <p class="muted">快，也要有刹车</p>
+                </div>
+                <div class="lane-grid">
+                  <article class="step">
+                    <div class="step-head"><span class="step-no">S7</span><span class="step-state">必做</span></div>
+                    <strong>运行最小校验</strong>
+                    <p>用 lint、构建、脚本校验或人工清单验证结果，不靠“看起来像对的”。</p>
+                  </article>
+                  <article class="step">
+                    <div class="step-head"><span class="step-no">S8</span><span class="step-state">重点</span></div>
+                    <strong>记录可复用结论</strong>
+                    <p>把有效提示词、输入模板、失败模式沉淀下来，下一次才能复利。</p>
+                  </article>
+                  <article class="step">
+                    <div class="step-head"><span class="step-no">S9</span><span class="step-state">兜底</span></div>
+                    <strong>保留回退点</strong>
+                    <p>必要时备份或建立版本点，别把“试试”变成“回不去”。</p>
+                  </article>
+                </div>
+              </article>
+            </div>
+            <aside class="process-side">
+              <article class="fact-row">
+                <div class="fact-key">输入口径</div>
+                <div><p>问题若模糊，AI 会用流畅话术掩盖真实不确定性。所以先补齐输入，通常比改提示词更赚。</p></div>
+              </article>
+              <article class="fact-row">
+                <div class="fact-key">分工原则</div>
+                <div><p>AI 负责发散、整理、改写与执行；人负责目标、边界、取舍和最终判断。</p></div>
+              </article>
+              <article class="fact-row">
+                <div class="fact-key">回滚条件</div>
+                <div><p>当结果无法解释、范围失控或验证失败时，回到上一稳定版本重开，不赌下一次随机更聪明。</p></div>
+              </article>
+              <div class="tip-card" role="note" aria-label="流程提醒">
+                <strong>记忆点</strong>
+                好的 AI 协作流程像施工图：先定边界，再分工，再验收；不是把希望托付给一句“请帮我做好”。
+              </div>
+            </aside>
+          </div>
+          <div class="slide-foot">
+            <span>三泳道流程页，强调输入 / 决策 / 验证</span>
+            <span>流程必须说明回滚点</span>
+          </div>
+        </section>
+
+        <section class="slide layout-evidence mode-matrix" data-index="3" aria-labelledby="slide-3-title">
+          <div class="slide-head">
+            <span class="eyebrow">P4 · 证据</span>
+            <span class="page-chip" aria-label="第 4 页，共 7 页">04 / 07</span>
+          </div>
+          <div class="evidence-body">
+            <div>
+              <span class="chip">证据链</span>
+              <h2 id="slide-3-title" class="slide-title">为什么这套做法能减少返工：把证据放在“速度”旁边一起看</h2>
+              <p class="slide-lede">证据页不能只展示数字，还要说明口径、来源和解读方向。否则数据会像装饰灯，亮但没用。</p>
+            </div>
+            <div class="metric-strip">
+              <article class="metric">
+                <strong>初稿时间</strong>
+                <span class="metric-value">-43%</span>
+                <span class="metric-sub">前提：输入模板固定</span>
+              </article>
+              <article class="metric">
+                <strong>返工轮次</strong>
+                <span class="metric-value">-2.1</span>
+                <span class="metric-sub">从 4.0 次降到 1.9 次</span>
+              </article>
+              <article class="metric">
+                <strong>可复用资产</strong>
+                <span class="metric-value">+6</span>
+                <span class="metric-sub">沉淀模板、清单、校验脚本</span>
+              </article>
+              <article class="metric">
+                <strong>隐性收益</strong>
+                <span class="metric-value">高</span>
+                <span class="metric-sub">跨人协作损耗明显下降</span>
+              </article>
+            </div>
+            <div class="evidence-grid">
+              <article class="panel">
+                <h3>证据矩阵</h3>
+                <div class="matrix" role="table" aria-label="AI 协作证据矩阵">
+                  <div class="matrix-row" role="row">
+                    <strong role="cell">输入模板固定</strong>
+                    <span role="cell">观察：生成结构更稳定</span>
+                    <span role="cell">解释：AI 不再反复猜测任务边界</span>
+                  </div>
+                  <div class="matrix-row" role="row">
+                    <strong role="cell">候选方案并列</strong>
+                    <span role="cell">观察：关键取舍更早暴露</span>
+                    <span role="cell">解释：减少“先做再否”的代价</span>
+                  </div>
+                  <div class="matrix-row" role="row">
+                    <strong role="cell">先验证再扩面</strong>
+                    <span role="cell">观察：错误更集中、更易回退</span>
+                    <span role="cell">解释：不把试验误当最终产物</span>
+                  </div>
+                  <div class="matrix-row" role="row">
+                    <strong role="cell">沉淀标准产物</strong>
+                    <span role="cell">观察：团队可复用率提升</span>
+                    <span role="cell">解释：个人技巧变成团队资产</span>
+                  </div>
+                </div>
+              </article>
+              <div class="quote-panel">
+                <blockquote>证据支持的结论是：<span class="emphasis">AI 不是单点提效工具，而是把“澄清—取舍—验证”三件事搬到更早的时间点</span>。越早，返工越少。</blockquote>
+              </div>
+            </div>
+          </div>
+          <div class="slide-foot">
+            <span>指标带 + 证据矩阵 + 结论引语</span>
+            <span>数字必须配口径和解释</span>
+          </div>
+        </section>
+
+        <section class="slide layout-compare mode-compare" data-index="4" aria-labelledby="slide-4-title">
+          <div class="slide-head">
+            <span class="eyebrow">P5 · 对比</span>
+            <span class="page-chip" aria-label="第 5 页，共 7 页">05 / 07</span>
+          </div>
+          <div class="compare-body">
+            <article class="compare-card caution">
+              <div>
+                <span class="mini-chip">旧做法</span>
+                <h2 id="slide-4-title" class="slide-title" style="font-size:clamp(1.6rem,2.6vw,2.3rem);margin-top:0.55rem;">把 AI 当万能执行器</h2>
+              </div>
+              <ul>
+                <li>问题描述不完整，先生成再返工。</li>
+                <li>只问一个答案，没有候选方案与取舍。</li>
+                <li>修改范围过大，容易“修一页坏一串”。</li>
+                <li>校验滞后，结果经常是“看起来很像”。</li>
+              </ul>
+              <p class="warn">代价：快在表面，慢在后续；团队越多人，噪音越大。</p>
+            </article>
+
+            <article class="compare-card good">
+              <div>
+                <span class="mini-chip">新做法</span>
+                <h2 class="slide-title" style="font-size:clamp(1.6rem,2.6vw,2.3rem);margin-top:0.55rem;">把 AI 纳入受约束的协作协议</h2>
+              </div>
+              <ul>
+                <li>任务开始前补齐输入模板与失败信号。</li>
+                <li>强制输出候选方案，显式做人工取舍。</li>
+                <li>采用小步修改，缩小影响半径。</li>
+                <li>改完立刻验证，把错误卡在最早一轮。</li>
+              </ul>
+              <p class="ok">收益：节奏更稳，结果更可复述，跨人协作时不容易失控。</p>
+            </article>
+
+            <aside class="panel" aria-label="取舍判断">
+              <h3>判断轴</h3>
+              <div class="decision-list">
+                <div class="decision-item">
+                  <strong>速度轴</strong>
+                  <p>旧做法首轮更快；新做法从第二轮开始明显占优。</p>
+                </div>
+                <div class="decision-item">
+                  <strong>质量轴</strong>
+                  <p>新做法把“验收口径”前置，最终质量更可控。</p>
+                </div>
+                <div class="decision-item">
+                  <strong>协作轴</strong>
+                  <p>新做法适合多人接力，旧做法更像单人即兴。</p>
+                </div>
+                <div class="decision-item">
+                  <strong>推荐结论</strong>
+                  <p>个人探索可轻量，团队交付应采用协议化工作流。</p>
+                </div>
+              </div>
+            </aside>
+          </div>
+          <div class="slide-foot">
+            <span>双塔对比 + 取舍轴侧栏</span>
+            <span>对比页负责回答“为什么要改”</span>
+          </div>
+        </section>
+
+        <section class="slide layout-action mode-dashboard" data-index="5" aria-labelledby="slide-5-title">
+          <div class="slide-head">
+            <span class="eyebrow">P6 · 行动</span>
+            <span class="page-chip" aria-label="第 6 页，共 7 页">06 / 07</span>
+          </div>
+          <div class="action-body">
+            <div>
+              <span class="chip">行动清单</span>
+              <h2 id="slide-5-title" class="slide-title">把今天的共识落成 72 小时内能执行的动作，而不是“回头再看”</h2>
+              <p class="slide-lede">行动页的价值，在于把抽象方法翻译成负责人、时间窗、交付物和验收标准。没有这页，整场分享就容易变成一阵掌声。</p>
+              <div class="action-grid">
+                <article class="action-card">
+                  <strong>动作 A｜统一输入模板</strong>
+                  <span class="owner">Owner · 组内内容负责人</span>
+                  <p>本周内固化背景、目标、约束、验收四段输入模板，所有新任务先按模板提交。</p>
+                  <p class="ok">验收：新任务文档中 100% 出现四段输入。</p>
+                </article>
+                <article class="action-card">
+                  <strong>动作 B｜要求候选方案并列</strong>
+                  <span class="owner">Owner · 各项目主负责人</span>
+                  <p>所有关键任务至少要求 AI 给出 2 个方案，并注明适用条件与风险。</p>
+                  <p class="ok">验收：评审前文档均有方案对照段。</p>
+                </article>
+                <article class="action-card">
+                  <strong>动作 C｜修改后立刻校验</strong>
+                  <span class="owner">Owner · 实施同学</span>
+                  <p>代码、HTML、脚本类任务完成后必须附校验结果，失败不得直接交付。</p>
+                  <p class="ok">验收：交付消息包含命令与结果摘要。</p>
+                </article>
+                <article class="action-card">
+                  <strong>动作 D｜沉淀失败模式库</strong>
+                  <span class="owner">Owner · 方法论维护人</span>
+                  <p>把典型返工场景、错误模式和修复路径收进共享文档，下次直接复用。</p>
+                  <p class="ok">验收：形成首版“失败信号与恢复”列表。</p>
+                </article>
+              </div>
+            </div>
+            <aside class="panel">
+              <h3>72 小时时间窗</h3>
+              <div class="timeline-board">
+                <div class="timeline-row">
+                  <div class="time">T+0</div>
+                  <div><p>分享结束后，当场确定模板 owner 与首个试点任务。</p></div>
+                </div>
+                <div class="timeline-row">
+                  <div class="time">T+24h</div>
+                  <div><p>完成模板草案，挑 1 个真实任务试跑，记录卡点。</p></div>
+                </div>
+                <div class="timeline-row">
+                  <div class="time">T+48h</div>
+                  <div><p>补齐候选方案与校验口径，修正不清楚的字段定义。</p></div>
+                </div>
+                <div class="timeline-row">
+                  <div class="time">T+72h</div>
+                  <div><p>输出首版团队协议：输入模板、执行流程、验证要求、复盘入口。</p></div>
+                </div>
+              </div>
+              <div class="tip-card" role="note" aria-label="行动提醒">
+                <strong>关键提醒</strong>
+                如果分享之后没有明确 owner、时间窗与验收标准，那么“认同”很快就会蒸发成聊天记录。
+              </div>
+            </aside>
+          </div>
+          <div class="slide-foot">
+            <span>行动看板 + 时间窗侧栏</span>
+            <span>每个动作都要有 owner 和验收</span>
+          </div>
+        </section>
+
+        <section class="slide layout-closing mode-summary" data-index="6" aria-labelledby="slide-6-title">
+          <div class="slide-head">
+            <span class="eyebrow">P7 · 底页</span>
+            <span class="page-chip" aria-label="第 7 页，共 7 页">07 / 07</span>
+          </div>
+          <div class="closing-body">
+            <div>
+              <span class="chip">结论回收</span>
+              <h2 id="slide-6-title" class="slide-title">真正提升效率的，不是多会“提要求”，而是多会“设计协作”</h2>
+              <p class="slide-lede">底页负责把全场内容收成能带走的三句话：今天讲了什么、为什么值得做、接下来谁来做。</p>
+              <div class="summary-grid">
+                <article class="summary-card">
+                  <strong>结论 1</strong>
+                  <p>AI 最擅长加速表达和执行，不擅长替你定义目标与边界。</p>
+                </article>
+                <article class="summary-card">
+                  <strong>结论 2</strong>
+                  <p>把候选方案、失败信号、校验命令前置，能显著减少返工。</p>
+                </article>
+                <article class="summary-card">
+                  <strong>结论 3</strong>
+                  <p>个人技巧只有变成团队协议，才会稳定复利，而不是依赖天赋发挥。</p>
+                </article>
+              </div>
+            </div>
+            <aside class="closing-grid">
+              <div class="quote-box">
+                <p class="closing-quote">把 AI 放进流程，而不是放在神坛上。</p>
+                <p class="closing-line">会后建议：从一个真实任务开始试跑，把方法做成团队日常，而不是只做一场漂亮分享。</p>
+              </div>
+              <article class="panel">
+                <h3>会后出口</h3>
+                <ul>
+                  <li>共享模板：输入四段式、候选方案对照表、校验记录单。</li>
+                  <li>共享清单：失败模式、恢复动作、复盘问题库。</li>
+                  <li>下次复盘：一周后看试点任务，确认是否继续扩面。</li>
+                </ul>
+              </article>
+            </aside>
+          </div>
+          <div class="slide-foot">
+            <span>总结三连 + 会后出口</span>
+            <span>让结尾留下动作，不只留下礼貌</span>
+          </div>
+        </section>
+      </div>
+
+      <div class="deck-chrome bottom">
+        <div class="status-panel">
+          <span id="pageNum">01 / 07</span>
+          <span id="navHint">⌨ ←/→/Space 翻页 · Home/End 跳转 · ⇆ 左右滑动切页</span>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    (() => {
+      const slides = Array.from(document.querySelectorAll('.deck > .slide'));
+      const pageNum = document.getElementById('pageNum');
+      const liveRegion = document.getElementById('liveRegion');
+      const total = slides.length;
+      let current = slides.findIndex((slide) => slide.classList.contains('active'));
+      let touchStartX = 0;
+      let touchStartY = 0;
+      const swipeThreshold = 60;
+
+      const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
+      const getTitle = (slide) => {
+        const heading = slide.querySelector('h1, h2, h3');
+        return heading ? heading.textContent.trim() : `第 ${slide.dataset.index} 页`;
+      };
+
+      const formatPage = (index) => `${String(index + 1).padStart(2, '0')} / ${String(total).padStart(2, '0')}`;
+
+      const announce = (index) => {
+        if (!liveRegion) {
+          return;
+        }
+        liveRegion.textContent = `第 ${index + 1} 页，共 ${total} 页 — ${getTitle(slides[index])}`;
+      };
+
+      const render = () => {
+        slides.forEach((slide, index) => {
+          slide.classList.toggle('active', index === current);
+          slide.setAttribute('aria-hidden', index === current ? 'false' : 'true');
+        });
+
+        if (pageNum) {
+          pageNum.textContent = formatPage(current);
+        }
+
+        announce(current);
+      };
+
+      const goTo = (index) => {
+        const nextIndex = clamp(index, 0, total - 1);
+        if (nextIndex === current) {
+          return;
+        }
+        current = nextIndex;
+        render();
+      };
+
+      const handleKeydown = (event) => {
+        const target = event.target;
+        const tagName = target && target.tagName ? target.tagName.toLowerCase() : '';
+        const isEditable = target && (target.isContentEditable || ['input', 'textarea', 'select'].includes(tagName));
+        if (isEditable) {
+          return;
+        }
+
+        if (event.key === 'ArrowRight' || event.key === 'ArrowDown' || event.key === ' ') {
+          event.preventDefault();
+          goTo(current + 1);
+          return;
+        }
+
+        if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+          event.preventDefault();
+          goTo(current - 1);
+          return;
+        }
+
+        if (event.key === 'Home') {
+          event.preventDefault();
+          goTo(0);
+          return;
+        }
+
+        if (event.key === 'End') {
+          event.preventDefault();
+          goTo(total - 1);
+        }
+      };
+
+      const onTouchStart = (event) => {
+        const touch = event.changedTouches[0];
+        touchStartX = touch.clientX;
+        touchStartY = touch.clientY;
+      };
+
+      const onTouchEnd = (event) => {
+        const touch = event.changedTouches[0];
+        const deltaX = touch.clientX - touchStartX;
+        const deltaY = touch.clientY - touchStartY;
+
+        if (Math.abs(deltaX) < swipeThreshold || Math.abs(deltaX) <= Math.abs(deltaY)) {
+          return;
+        }
+
+        if (deltaX < 0) {
+          goTo(current + 1);
+          return;
+        }
+
+        goTo(current - 1);
+      };
+
+      if (current < 0) {
+        current = 0;
+      }
+
+      document.addEventListener('keydown', handleKeydown, { passive: false });
+
+      const deck = document.querySelector('.deck');
+      if (deck) {
+        deck.addEventListener('touchstart', onTouchStart, { passive: true });
+        deck.addEventListener('touchend', onTouchEnd, { passive: true });
+      }
+
+      render();
+    })();
+  </script>
+</body>
+</html>

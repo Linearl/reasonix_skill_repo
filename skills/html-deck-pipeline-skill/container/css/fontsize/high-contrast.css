@@ -1,0 +1,9 @@
+/* ===== Font Size: 高对比 ===== */
+/* 标题/表头 +4px，正文不变 */
+[data-font-size="high-contrast"] {
+  --text-xs: 0.72rem;
+  --text-sm: 1.07rem;
+  --text-md: 0.95rem;
+  --text-lg: 1.35rem;
+  --text-xl: clamp(1.4rem, 2.1vw, 1.75rem);
+}

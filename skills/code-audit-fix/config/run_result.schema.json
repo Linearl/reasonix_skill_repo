@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/code-audit-fix/run_result.schema.json",
+  "title": "code-audit-fix run_result schema",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["pass", "blocked"]
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["interactive", "non_interactive"]
+    },
+    "config": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "config_file": { "type": "string", "minLength": 1 },
+        "effective_config_file": { "type": "string", "minLength": 1 },
+        "schema_file": { "type": "string", "minLength": 1 }
+      },
+      "required": ["config_file", "effective_config_file", "schema_file"]
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fixed": { "type": "integer", "minimum": 0 },
+        "skipped": { "type": "integer", "minimum": 0 },
+        "remaining": { "type": "integer", "minimum": 0 },
+        "gate": { "type": "string", "enum": ["pass", "blocked"] }
+      },
+      "required": ["fixed", "skipped", "remaining", "gate"]
+    },
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tests": { "type": "string", "enum": ["pass", "fail", "skip"] },
+        "format": { "type": "string", "enum": ["pass", "fail", "skip"] },
+        "perf_regression_pct": { "type": "number" },
+        "perf_threshold_pct": { "type": "number", "minimum": 0 }
+      },
+      "required": ["tests", "format", "perf_regression_pct", "perf_threshold_pct"]
+    },
+    "blocking_reasons": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "SCHEMA_INVALID",
+              "CONFIG_MISSING",
+              "QUESTION_ABORTED",
+              "TEST_FAIL",
+              "FORMAT_FAIL",
+              "PERF_REGRESSION",
+              "MERGE_GATE_FAIL",
+              "UNKNOWN_ERROR"
+            ]
+          },
+          "message": { "type": "string", "minLength": 1 },
+          "location": { "type": "string" }
+        },
+        "required": ["code", "message"]
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "report": { "type": "string", "minLength": 1 },
+        "decision_log": { "type": "string", "minLength": 1 },
+        "skip_log": { "type": "string", "minLength": 1 },
+        "debt_backlog": { "type": "string", "minLength": 1 }
+      },
+      "required": ["report", "decision_log", "skip_log", "debt_backlog"]
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "status",
+    "mode",
+    "config",
+    "summary",
+    "quality",
+    "blocking_reasons",
+    "artifacts",
+    "timestamp"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": { "const": "pass" }
+        }
+      },
+      "then": {
+        "properties": {
+          "blocking_reasons": { "maxItems": 0 }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": { "const": "blocked" }
+        }
+      },
+      "then": {
+        "properties": {
+          "blocking_reasons": { "minItems": 1 }
+        }
+      }
+    }
+  ]
+}

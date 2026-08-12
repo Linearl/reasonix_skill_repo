@@ -1,0 +1,22 @@
+# HTML Deck — 主题与字号配置
+# 新增主题/字号时只需在此文件中追加条目，无需修改 JS/HTML
+
+themes:
+  - id: dark-theme
+    label: 暗色
+  - id: dark-theme-2
+    label: 暗色2
+    default: true
+  - id: light-theme
+    label: 亮色
+  - id: qclaw-theme
+    label: 青律
+
+fontsizes:
+  - id: standard
+    label: 标准
+    default: true
+  - id: high-contrast
+    label: 高对比
+  - id: large
+    label: 大字号

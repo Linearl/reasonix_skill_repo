@@ -1,0 +1,22 @@
+/* 章节额外样式模板 — D.4 按需使用
+ *
+ * 使用方式：
+ *   1. 复制到 v-XX/style/<part_id>.css
+ *   2. 所有选择器挂在 .part-<part_id> 命名空间下
+ *   3. 优先使用主题 token 变量（var(--xxx)），减少硬编码值
+ */
+
+.part-ch01 {
+  /* 示例：章节标题强调色 */
+  /* --accent: var(--brand); */
+}
+
+.part-ch01 .card {
+  /* 示例：卡片间距微调 */
+  /* gap: 1.2rem; */
+}
+
+.part-ch01 .tip-box {
+  /* 示例：提示框样式覆盖 */
+  /* border-color: var(--accent); */
+}

@@ -1,0 +1,76 @@
+/* ===== Design Tokens: Qclaw Theme (深色红轴) ===== */
+
+/* Shared (non-theme) */
+:root {
+  --font-main: "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", "Helvetica Neue", sans-serif;
+  --font-code: "Cascadia Code", "Fira Code", "Source Code Pro", "Microsoft YaHei UI", "Consolas", monospace;
+  --radius-xl: 28px;
+  --radius-lg: 22px;
+  --radius-md: 18px;
+  --radius-sm: 14px;
+  --panel-pad: 1.05rem;
+  --transition-fast: 220ms ease;
+}
+
+/* ===== Qclaw theme (深色红轴) ===== */
+:root, [data-theme="qclaw"] {
+  --bg: #0b1020;
+  --bg-deep: #070c18;
+  --surface-1: rgba(19, 26, 48, 0.95);
+  --surface-2: rgba(27, 36, 66, 0.9);
+  --surface-3: rgba(35, 46, 82, 0.65);
+  --glass-bg: rgba(172, 183, 215, 0.04);
+  --glass-bd: rgba(172, 183, 215, 0.08);
+  --text: #e8eefc;
+  --text-sec: #acb7d7;
+  --text-faint: #7b85a6;
+  --status: #c8d4f0;
+  --accent: #5ea1ff;
+  --accent-strong: #82b8ff;
+  --accent-soft: rgba(94, 161, 255, 0.15);
+  --brand: #e53935;
+  --ok: #36d399;
+  --warn: #ffd166;
+  --risk: #ff8a80;
+  --info: #5ea1ff;
+  --tip-bg: rgba(54, 211, 153, 0.1);
+  --tip-bd: rgba(54, 211, 153, 0.28);
+  --shadow-soft: 0 14px 36px rgba(0, 0, 0, 0.28);
+  --shadow-strong: 0 24px 60px rgba(0, 0, 0, 0.44);
+  --texture-grid: rgba(94, 161, 255, 0.06);
+  --code-bg: #0a1122;
+  --focus-ring: #ffd166;
+
+  /* Overlay & border tokens */
+  --border-subtle: rgba(172, 183, 215, 0.1);
+  --border-soft: rgba(172, 183, 215, 0.05);
+  --surface-glass: rgba(172, 183, 215, 0.04);
+  --surface-glow: rgba(172, 183, 215, 0.015);
+  --surface-hover: rgba(172, 183, 215, 0.08);
+  --row-stripe: rgba(172, 183, 215, 0.02);
+  --row-line: rgba(172, 183, 215, 0.05);
+
+  /* Background gradients */
+  --bg-gradient-body:
+    radial-gradient(circle at 82% 10%, rgba(229, 57, 53, 0.14), transparent 28%),
+    radial-gradient(circle at 12% 88%, rgba(94, 161, 255, 0.1), transparent 26%),
+    linear-gradient(180deg, #080e1d 0%, #0b1020 52%, #070c18 100%);
+
+  --bg-gradient-deck:
+    linear-gradient(180deg, rgba(172, 183, 215, 0.02), rgba(172, 183, 215, 0.01)),
+    linear-gradient(140deg, rgba(11, 16, 32, 0.98), rgba(7, 12, 24, 0.98));
+
+  --bg-gradient-slide:
+    radial-gradient(circle at 88% 16%, rgba(229, 57, 53, 0.12), transparent 24%),
+    radial-gradient(circle at 12% 14%, rgba(94, 161, 255, 0.08), transparent 26%),
+    linear-gradient(180deg, rgba(19, 26, 48, 0.97), rgba(11, 16, 32, 0.97));
+
+  /* Sticky header bg for tables */
+  --sticky-bg: #131a30;
+
+  /* Compat aliases for qclaw-specific component.css */
+  --radius: 20px;
+  --panel-soft: rgba(27, 36, 66, 0.9);
+  --border: #2d3c67;
+  --shadow: 0 18px 42px rgba(0, 0, 0, 0.36);
+}
