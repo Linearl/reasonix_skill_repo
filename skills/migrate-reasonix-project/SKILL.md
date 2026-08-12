@@ -1,16 +1,16 @@
 ---
 name: migrate-reasonix-project
-description: 迁移 Reasonix（及 Claude Code）项目目录时保留对话历史的完整流程
+description: 迁移 Reasonix（及 Claude Code / Codex）项目目录时保留对话历史的完整流程
 ---
 
 ---
 name: "migrate-reasonix-project"
-description: "迁移 Reasonix 项目目录时保留对话历史的完整流程（含 Claude Code 历史联动迁移）。当用户移动、重命名项目文件夹时使用此技能。"
+description: "迁移 Reasonix 项目目录时保留对话历史的完整流程（含 Claude Code / Codex 历史联动迁移）。当用户移动、重命名项目文件夹时使用此技能。"
 ---
 
 # Reasonix 项目迁移技能
 
-当用户需要移动、重命名项目目录时使用此技能。覆盖 Reasonix 与 Claude Code 两套对话历史的迁移。
+当用户需要移动、重命名项目目录时使用此技能。覆盖 Reasonix / Claude Code / Codex 三套对话历史的迁移。
 
 ## 核心知识
 
@@ -42,6 +42,10 @@ description: "迁移 Reasonix 项目目录时保留对话历史的完整流程�
 ### Claude Code 对话历史存储位置（联动迁移）
 
 `~/.claude/projects/<encoded-path>/`，编码规则：下划线转连字符（`video_compensation` → `video-compensation`）。内含 `<session-uuid>.jsonl`、`<session-uuid>/` 子代理目录、`memory/`。同一项目文件夹往往同时存在两套历史，需都迁移。
+
+### Codex 对话历史存储位置（联动迁移）
+
+`~/.Codex/projects/<encoded-path>/`（Windows，Codex CLI 按项目**完整绝对路径**生成目录名）。编码规则：路径中的 `\`、`:` 全部替换为 `-`，连续 `-` 合并，大小写敏感。示例：`D:\1.workspace\data_platform` → `d--1-workspace-data-platform`。内含 `<session>.jsonl`（历史会话）、`memory/`（项目记忆）。**不要猜测编码**：用 `ls ~/.Codex/projects/` 对照现有目录名确认。项目内软链接（`.github/skills`、`.reasonix/skills`、`.codex/skills` 等）若用绝对路径指向旧位置，迁移后必须删除并用**相对路径**（`ln -s ../skills skills`）重建，否则再次迁移会损坏。
 
 ## 迁移步骤
 
@@ -91,6 +95,29 @@ new = r'D:\\1.workspace\\video_comprehension'
 ### Step 7: 更新桌面端项目列表（如有）
 
 `%APPDATA%\reasonix\desktop-projects.json` 中 `projects[].root` 若指向旧路径需更新。**若 reasonix-desktop 正在运行，修改可能被其保存覆盖**——改后需重启桌面端验证。
+
+### Step 8.5: 迁移 Codex 历史（如有）
+
+```bash
+# 1. 确认路径哈希：旧目录名与新目录名
+ls ~/.Codex/projects/
+
+# 2. 复制历史会话（新目录已存在时直接覆盖，不会冲突）
+cp -r ~/.Codex/projects/<旧目录名>/* ~/.Codex/projects/<新目录名>/
+
+# 3. 重建项目内软链接（必须相对路径）
+cd <新项目目录>
+rm -rf .github/skills .reasonix/skills .codex/skills
+cd .github  && ln -s ../skills skills && cd ..
+cd .reasonix && ln -s ../skills skills && cd ..
+cd .codex   && ln -s ../skills skills && cd ..
+
+# 4. 验证
+ls ~/.Codex/projects/<新目录名>/*.jsonl | wc -l
+ls ~/.Codex/projects/<新目录名>/memory/
+```
+
+重启 Codex 后按 `/` 查看历史对话是否可见。回滚：移回原位置 + 恢复 `~/.Codex/projects/` 会话 + 重建绝对路径软链。
 
 ### Step 8: 更新项目内引用
 
