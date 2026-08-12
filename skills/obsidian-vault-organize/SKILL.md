@@ -58,28 +58,37 @@ python "<技能目录>/scripts/relink.py" <vault> <old> <new>
 
 ### Step 5 断链校验（必须归零）
 ```bash
-python "<技能目录>/scripts/check_links.py" <vault>
+python "<技能目录>/scripts/check_links.py" <vault路径> --exclude .claudian --json > out.json
 ```
-- 输出所有断链（文件:行:链接 + 原因），退出码 1 表示有断链。
-- 校验通过标准：**0 断链**。有残留就回到 Step 4/5 循环（漏掉的链接类型、路径风格差异、大小写问题）。
-- 提示用户在 Obsidian 里看一眼图（graph view）确认。
+- `--json` 输出 `issues[]`（kind: `markdown`/`wikilink`；markdown 且 target 含 `Exported` 系列时是 importer 漏导/源损坏的图片断链）
+- 修复图片断链的完整方法论见 [[onenote-import-pipeline]]（pageInfo=1 提取 base64、配对规则、在线分区下载）
 
-### Step 6 清理（可选，谨慎）
-- 孤儿文件 = 未被任何链接/嵌入引用、且不是 `.obsidian/` 配置的文件。
-- 先 `check_links.py` 全绿，再列孤儿清单给人核对，**移到回收目录**而非直接删除（见安全规范），确认无误后再清空回收目录。
+### Step 6 清理
+- 删除残留空目录、临时文件；提交 git 时用显式路径（禁 `git add -A`，见全局教训）。
 
-## 注意事项与坑
+## 常见故障：Remotely Save 同步报错（ERR_INCOMPLETE_CHUNKED_ENCODING）
 
-1. **wikilink 不带扩展名，markdown 链接可能带 `.md`**：匹配时两种形式都要覆盖；附件（图片/PDF）保持原扩展名。
-2. **相对路径链接**：以所在文件目录为基准解析；重写时保持原风格（原来相对就生成新的相对路径，原来 `/` 绝对就生成新的绝对形式）。
-3. **URL 编码**：markdown 链接里的空格可能写成 `%20`；重写时按原编码风格逐段 `quote`。
-4. **同名文件歧义**：vault 里不同目录可存在同名笔记，Obsidian 用最短路径消歧。重写时保留原有的消歧形式（如 `[[sub/Note]]` 不要简化为 `[[Note]]`）。
-5. **`#锚点` / `^块引用`**：只替换路径前缀，锚点原样保留；锚点指向的标题没变就不用管。
-6. **大小写**：Obsidian 链接解析与文件系统行为相关，默认精确匹配；Windows 上若有大小写不一致的历史链接，用 `--case-insensitive` 复核。
-7. **不要动 `.obsidian/` 内的配置**（除非任务明确要求）；插件数据（如 Claudian 的会话记录）不在链接修复范围内。
-8. **Obsidian 开着 ≠ 链接安全**：watcher 只感知不修复（见核心事实 2）；移动已打开的文件还可能冲突，操作后让用户手动触发 Obsidian 的"检测到外部变更"重载即可。
-9. **批量重命名目录**：先跑一次 dry-run 覆盖所有受影响文件，人工核对清单后再执行。
-10. 校验脚本会跳过代码块（``` 围栏）内的伪链接，避免误报。
+**现象**：Obsidian 的 Remotely Save 插件同步报 `net::ERR_INCOMPLETE_CHUNKED_ENCODING`（响应流被中途截断），或 onedrive.live.com 请求超时。2026-08-12 实测。
+
+**根因**：**本机代理软件（v2rayN/sing-box/Clash 等）与 OneDrive 的链路问题**——Obsidian（Electron）走系统代理（常见 `127.0.0.1:10808`），小请求能通，但 vault 首次全量同步（GB 级大流量）经代理节点时 chunked 响应被截断。国内网络下 onedrive.live.com 直连被墙、graph.microsoft.com 可直连。
+
+**排查步骤**：
+```bash
+tasklist | grep -iE "v2ray|clash|sing-box|xray"        # 1. 代理进程是否运行
+reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings" | grep -iE "ProxyEnable|ProxyServer"  # 2. 系统代理
+curl -s -o /dev/null -w "%{http_code} (%{time_total}s)\n" --max-time 20 https://graph.microsoft.com/v1.0/   # 3. 直连 Graph API（应 200）
+curl -s -o /dev/null -w "%{http_code}\n" --proxy http://127.0.0.1:10808 --max-time 20 https://onedrive.live.com/  # 4. 经代理（403 = 通）
+```
+
+**解决（按优先级）**：
+1. **关闭代理**（实测立竿见影，同步恢复正常）
+2. 或 v2rayN 分流规则把微软域名加 DIRECT 直连：`graph.microsoft.com`、`*.sharepoint.com`、`*.1drv.ms`、`onedrive.live.com`、`login.microsoftonline.com`
+3. 换稳定代理节点
+4. 仍断则降并发（Remotely Save 设置）或临时排除大目录（如 `0-attachments/`）先同步核心笔记
+
+**其他判断**：
+- 配置/授权问题 vs 网络问题的分水岭：**插件能发出请求（有响应、哪怕是 403）说明凭据正常**；密钥丢失的特征是启动即报解密错误
+- Remotely Save 的 `data.json` 是加密配置（localStorage 按 vault 分区存密钥）；vault 迁移（换路径/换 vault id）后 localStorage 分区清空会导致解密失败——**vault 迁移后需重新配置/授权**
 
 ## 脚本位置
 
@@ -95,3 +104,4 @@ python "<技能目录>/scripts/check_links.py" <vault>
 - [[obsidian-markdown]] — wikilink/嵌入/callouts/properties 语法规范（写新链接时参考）
 - [[obsidian-cli]] — vault 的 CLI 操作
 - [[book-to-skill]] — 文档→技能流水线（其断链校验思路与本技能一致）
+- [[onenote-import-pipeline]] — OneNote 断链图片修复方法论（Exported 系列断链）
