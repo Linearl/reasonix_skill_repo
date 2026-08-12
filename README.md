@@ -1,9 +1,9 @@
 # Reasonix 实用技能包
 
-> 面向 **Reasonix**（兼容 Claude Code 等支持 Agent Skills 的客户端）的实战技能集合：17 个技能，覆盖**专利检索、知识加工、网页抓取、本地 OCR、项目管理、笔记整理、远程部署**七大场景，全部来自真实项目实战沉淀。
+> 面向 **Reasonix**（兼容 Claude Code 等支持 Agent Skills 的客户端）的实战技能集合：18 个技能，覆盖**专利检索、知识加工、网页抓取、本地 OCR、项目管理、笔记整理、远程部署**七大场景，全部来自真实项目实战沉淀。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Skills](https://img.shields.io/badge/Skills-17-blue)](#-技能清单)
+[![Skills](https://img.shields.io/badge/Skills-18-blue)](#-技能清单)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)](#-安装)
 
 每个技能是一个自包含目录（`SKILL.md` + 配套脚本/参考文档），复制即用，无框架依赖。
@@ -31,12 +31,13 @@
 | 15 | [html-deck-pipeline-skill](skills/html-deck-pipeline-skill/) | 端到端 HTML 讲稿流水线：网站骨架 + WYSIWYG 编辑器 + 4 主题 × 3 字号 + 一键导出 HTML/PPTX，分镜先行/风格契约/质量门 | 自研（2026-08-11 从 linearleaf_skill_repo 迁移） |
 | 16 | [invest_analysis](skills/invest_analysis/) | A股/港股系统化投资研究：赛道筛选、供应链验证、财报核验、研报交叉验证（附数据工具链） | 自研（2026-08-11 从 linearleaf_skill_repo 迁移；仅方法论，不构成投资建议） |
 | 17 | [code-audit-fix](skills/code-audit-fix/) | 全流程代码审计：缺陷扫描、分优先级批量修复、多轮交叉复核、CI 非交互执行与结果契约 | 自研（2026-08-11 从 linearleaf_skill_repo 迁移） |
+| 18 | [session-context-restore](skills/session-context-restore/) | 新会话快速恢复前序工作上下文：git / memory / 任务包三源扫描（<30s）、恢复报告模板、触发词防误触发设计 | 自研（2026-08-12 加入，源自 data_platform 技能库沉淀） |
 
 **来源标注**：4 个技能从其他位置复制而来（经 B 站图文攻略整理流水线沉淀，与 Claude Code 通用），上游链接如下：
 - **obsidian-markdown / obsidian-bases / obsidian-cli**：内容整理自 [Obsidian 官方帮助文档仓库 obsidianmd/obsidian-help](https://github.com/obsidianmd/obsidian-help)（help.obsidian.md 的源码）
 - **book-to-skill**：上游开源项目 [virgiliojr94/book-to-skill](https://github.com/virgiliojr94/book-to-skill)（MIT，原作者保留版权；本项目为技能化复用）
 
-其余 10 个为本人工作实战自研沉淀。
+其余 14 个为本人工作实战自研沉淀。
 
 **组合流水线**：网页抓取（3）→ obsidian-markdown 规范化（6）→ obsidian-vault-organize 整理（9）；OneNote 旧笔记用（10）导入后同流水线整理。
 
