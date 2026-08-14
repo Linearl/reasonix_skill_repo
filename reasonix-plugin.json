@@ -1,0 +1,6 @@
+{
+  "name": "reasonix-skill-repo",
+  "version": "1.0.0",
+  "description": "Linearl 自研技能库：18 个顶层技能（obsidian 三件套、专利检索、gh-issue-submit、web-scraping、onenote-to-obsidian 等）+ html-deck-pipeline-skill 及内部子技能",
+  "skills": "skills"
+}
