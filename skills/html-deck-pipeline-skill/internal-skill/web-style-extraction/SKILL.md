@@ -1,3 +1,8 @@
+---
+name: web-style-extraction
+description: "从参考网站提取视觉设计特征，产出结构化设计参数（html-deck-pipeline-skill 内部子技能）"
+---
+
 # 网页风格提取辅助技能
 
 > 触发条件：当用户要求"参考某个网站的风格做 deck"、"照着 XX 网站的配色做"、"学习这个网页的视觉风格"时启用。
