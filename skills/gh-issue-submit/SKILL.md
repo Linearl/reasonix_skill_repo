@@ -47,7 +47,8 @@ gh api "search/issues?q=repo:<owner>/<repo>+is:issue+in:title+<关键词>" --jq 
 
 ### 2.5 源码调研（有源码则必做，feature 与 bug 一视同仁）
 
-- 公开仓库可直接 `git clone --depth 1`（需代理时走本机代理）；本地已有源码优先复用（如本机 `%TEMP%xsrc` 有 DeepSeek-Reasonix 源码），避免重复 clone。
+- 公开仓库可直接 `git clone --depth 1`（需代理时走本机代理）；本地已有源码优先复用（如本机 `%TEMP%
+xsrc` 有 DeepSeek-Reasonix 源码），避免重复 clone。
 - **bug**：定位问题链路的三环节——写入端（标题/状态何时落盘）/ 事件发送端（是否发事件）/ 前端刷新端（监听是否覆盖目标 UI）。每环节给 file:line 证据，再给分级修复建议（最小改动优先，贴现状代码）。能写出"写入端无延迟、事件已发、前端漏刷"这类定位，维护者可直接动手。
 - **feature**：读现有实现（相关模块路径、数据结构、既有事件/API），正文引用模块路径与现状代码，方案说明与现状的衔接点（改哪里、复用哪个函数）——"可照单开发"的规格书比空泛需求采纳率高得多。
 - 无法 clone / 无源码时：正文明确标注"未做源码调研"，避免误导维护者。
@@ -78,6 +79,20 @@ gh api "search/issues?q=repo:<owner>/<repo>+is:issue+in:title+<关键词>" --jq 
      ```
      向用户说明这是 gh CLI 官方 OAuth App 的授权页，点 Authorize 即可，不会暴露令牌值；
   4. 授权完成后再继续提交。目标仓库是**用户自己拥有**时，fine-grained PAT 即可，无需 OAuth。
+- **无 gh CLI / 无 keyring OAuth 凭据时的直接获取（GitHub OAuth device flow，2026-08-12 实测）**：不依赖 gh 安装，直接用设备授权码流程拿 `gho_` token（client_id 用 VSCode 的公开 OAuth App id `01ab8ac9400c4e429b23`）：
+  1. 请求设备码（本机有代理就带 `-x http://127.0.0.1:10808`）：
+     ```bash
+     curl -s -H "Accept: application/json"        -d "client_id=01ab8ac9400c4e429b23&scope=repo read:user user:email"        https://github.com/login/device/code
+     ```
+     返回 `user_code`（形如 `0FBF-BCC0`）、`device_code`、`verification_uri`、`interval`；
+  2. 让用户浏览器打开 `https://github.com/login/device` 输入 `user_code` 并点 Authorize（设备码约 15 分钟有效）；
+  3. 轮询换 token（error=authorization_pending 时按 interval 继续等，约 5s；slow_down 时加倍）：
+     ```bash
+     curl -s -H "Accept: application/json"        -d "client_id=01ab8ac9400c4e429b23&device_code=<device_code>&grant_type=urn:ietf:params:oauth:grant-type:device_code"        https://github.com/login/oauth/access_token
+     ```
+  4. 拿到 `access_token`（`gho_` 前缀，scope 含 `repo`）后持久化到 User 级环境变量（PowerShell：`[Environment]::SetEnvironmentVariable('GITHUB_TOKEN', $tok, 'User')`），或用临时文件→`export`，**用完删除含明文的临时文件**；
+  5. 验证：`curl -s -H "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/user` 返回 login 即成功；token 明文只在授权那一刻返回一次。
+  6. 管理入口：OAuth 授权**不会**出现在 `github.com/settings/tokens`（那是 PAT 页面），记录在 `github.com/settings/applications`（显示为 "Visual Studio Code"），撤销在那里 Revoke access，撤销后环境变量里的 token 立即失效。
 - **若用户不希望提供 OAuth 令牌（拒绝授权 / 不想动凭据）→ 回退到 computer use 浏览器自动化**（利用浏览器已有登录态，网页会话天然有提 issue 能力）：
   1. computer-use 打开 `https://github.com/<owner>/<repo>/issues/new/choose`（先确认浏览器已登录目标账号）；
   2. 选对应模板（如 `feature_request.yml`），填标题与正文后提交；
@@ -117,6 +132,29 @@ unset GITHUB_TOKEN GH_TOKEN
 gh issue view <编号> --repo <owner>/<repo> --json number,title,state,url --jq '{number,title,state,url}'
 ```
 - 确认 state=OPEN、作者、标题正确。把 URL 汇报给用户。
+### 7. PR 冲突处置：先查 supersede，再 rebase（2026-08-16 教训）
+
+PR 显示 `dirty`/`CONFLICTING` 时，**第一步永远是检查是否已被开发者自己合入/整合**——上游维护者常做"整合 PR"（把多个 open PR 的功能合并进自己的分支），此时相关 PR 应**关闭**而非 rebase，否则白干一场。
+
+**检查三步（按顺序）：**
+1. `git fetch upstream main-v2 && git log --oneline -20 upstream/main-v2`——看最近合入的提交标题是否覆盖我们的功能
+2. `env -u GITHUB_TOKEN -u GH_TOKEN gh api "repos/<owner>/<repo>/pulls?state=closed&per_page=30"` 或 GitHub 搜索 `repo:<owner>/<repo> is:pr is:merged "Fixes #<我们的issue>"` / `"Refs #<N>"`——找"Fixes/Refs 我们的 issue 编号"的已合并 PR
+3. 确认后读该 PR body 的 Source/Integration 表——看是否带我们的 Co-authored-by trailer（GitHub 会记录贡献）
+
+**若被 supersede：**
+- 发关闭评论（说明去向：被 #N 整合、功能已进上游、带 Co-authored-by）→ `gh api --method PATCH pulls/<n> -f state=closed`
+- 同时确认对应 issue：被 Fixes 自动关闭则验证 state=completed；未自动关闭则评论+关闭（state_reason=completed）
+- 不必纠结"白做"——维护者整合时会保留贡献署名
+
+**确认未被合入，才 rebase：**
+```bash
+git fetch upstream main-v2   # 注意：origin=fork 的 main-v2 不会同步上游！必须 fetch upstream
+git rebase upstream/main-v2
+# 解决冲突后：go build/test 或 tsc + 相关单测 → git push --force（确认远程无第三方提交后）
+```
+- rebase 冲突中若上游已重构我们依赖的 API（删字段/改格式），做**最小适配**（只保留我们功能的核心），必要时同步改测试
+- 多个 PR 全 dirty 时按依赖顺序处理（叠加分支先底层后上层）
+
 
 ## 注意事项
 
