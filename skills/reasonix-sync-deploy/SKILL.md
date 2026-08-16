@@ -61,9 +61,10 @@ python "<SCRIPTS>\sync-push.py"
 
 ### 第 4 步：验证
 
-1. `dir <SCRIPTS>\..\inbox\<本机计算机名>` 下出现 `skills\` 与 `memory\global\` 且非空（仅同步体系场景）。
+1. `dir <SCRIPTS>\..\inbox\<本机计算机名>` 下应出现 `memory\global\` 且非空。
+   `skills\` **只有本机装有用户级技能（`%APPDATA%\reasonix\skills\`）时才会出现**，新机器/未装过技能时没有是正常现象。
 2. 告知用户当前状态：
-   - 同步体系场景：快照已进入中央 inbox；主力机周五组织时会把本机纳入审查；本机周一 10:30 Pull 后自动获得 dist 的全部技能与全局记忆（含 `reasonix-sync-review` 审查技能）。
+   - 同步体系场景：快照已进入中央 inbox；主力机周五组织时会把本机纳入审查；本机周一 10:30 Pull 后自动获得 dist 的全部技能与全局记忆（含 `reasonix-sync-review` 审查技能），此后 Push 也会带上本机技能。
    - 独立/分享场景：本机定时任务已建立，技能+记忆快照会持续写入本地 `inbox\` 镜像（无主力机时仅保留本机快照，仍可用于后续接入体系）。
 
 ## 排障
@@ -71,9 +72,11 @@ python "<SCRIPTS>\sync-push.py"
 | 现象 | 处理 |
 |---|---|
 | `<SCRIPTS>` 定位失败 | 分享包解压不完整（缺 `scripts\`）或 OneDrive 未同步完；检查后重试 |
+| 任务创建后复核发现缺失（OneDrive 同步竞态） | OneDrive 尚未同步完时运行安装脚本，可能漏建个别任务（实战踩坑）。**复核命令**：`powershell -NoProfile -Command "Get-ScheduledTask -TaskPath '\ReasonixSync\' | Select-Object TaskName, State"`，缺哪个就重跑一次安装脚本 |
 | `pythonw` 找不到 | 安装 Python，或编辑 `install-tasks.ps1` 的候选路径列表 |
 | 任务创建失败 | 确认不是管理员窗口；`schtasks /Query /TN "ReasonixSync\Push"` 查状态 |
 | push 报错 | 查看日志 `%LOCALAPPDATA%\reasonix-sync\logs\push.log`（UTF-8） |
+| push 提示"未发现本机用户级技能" | 正常：本机未装过技能时 skills 目录不会出现；Pull 一次后（dist 技能会装到本机）再 Push 就有技能了 |
 
 ## 注意事项
 

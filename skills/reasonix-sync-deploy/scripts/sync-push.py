@@ -44,7 +44,7 @@ def main() -> int:
     n_skills = 0
     n_removed_skills = 0
     skills_src = home / "skills"
-    if skills_src.is_dir():
+    if skills_src.is_dir() and any(skills_src.iterdir()):
         n_skills = C.copy_tree(skills_src, inbox / "skills")
         # 本机顶层条目清单（技能目录 + 散文件），镜像中多余的移到 .removed
         keep = set()
@@ -56,6 +56,9 @@ def main() -> int:
         if not args.dry_run:
             n_removed_skills = C.clean_mirror_top(inbox / "skills", keep)
         print(f"  技能: 复制 {n_skills} 文件, 清理 {n_removed_skills} 项")
+    else:
+        print(f"  ⚠️ 未发现本机用户级技能（{skills_src} 不存在或为空）——如本机应装有技能，请检查 REASONIX_HOME 与技能安装位置")
+        C.log("push", f"[{machine}] 未发现用户级技能目录: {skills_src}")
 
     # ---- 2. 全局记忆（active facts，不含 MEMORY.md 索引、.archive、.revisions）----
     n_facts = 0
@@ -93,6 +96,20 @@ def main() -> int:
             if not args.dry_run:
                 C.clean_mirror(proj_in / pdir.name, keep_proj, "*.md")
         print(f"  项目记忆(近{window}天): 复制 {n_proj} 个文件")
+
+    # ---- 4. credential 凭据目录（收口后随本机备份到体系）----
+    # 注意：不走 copy_tree（其排除清单含 "nas-" 前缀，会误伤 nas-credentials.md）
+    n_cred = 0
+    cred_src = home / "global-workspace" / "credential"
+    if cred_src.is_dir():
+        for f in sorted(cred_src.rglob("*")):
+            if f.is_dir():
+                continue
+            if C.copy_file(f, inbox / "credential" / f.relative_to(cred_src)):
+                n_cred += 1
+        print(f"  credential: 复制 {n_cred} 文件")
+    else:
+        print(f"  ⚠️ 未发现本机凭据目录（{cred_src}）——如本机有凭据请先收口到该目录")
 
     if args.dry_run:
         print("[dry-run] 演练结束，未写 meta")

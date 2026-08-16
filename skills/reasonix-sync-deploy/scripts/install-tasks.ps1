@@ -46,16 +46,23 @@ Write-Host "Sync dir: $syncDir"
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew
 
 function New-RxTask {
-    param([string]$Name, [string]$Script, $Trigger)
-    $action = New-ScheduledTaskAction -Execute $pyw -Argument "`"$syncDir\scripts\$Script`""
-    Register-ScheduledTask -TaskName "ReasonixSync\$Name" -Action $action -Trigger $Trigger -Settings $settings -Force | Out-Null
-    Write-Host "Created: ReasonixSync\$Name  (StartWhenAvailable = True)"
+    param([string]$Name, [string]$Script, $Trigger, [string[]]$Followup = @())
+    # 主脚本 + 可选的后续脚本（同 trigger 依次执行，如 Pull 后跑 sync-feedback.py 生成检查/反馈模板）
+    $actions = @()
+    $actions += New-ScheduledTaskAction -Execute $pyw -Argument "`"$syncDir\scripts\$Script`""
+    foreach ($f in $Followup) {
+        $actions += New-ScheduledTaskAction -Execute $pyw -Argument "`"$syncDir\scripts\$f`""
+    }
+    Register-ScheduledTask -TaskName "ReasonixSync\$Name" -Action $actions -Trigger $Trigger -Settings $settings -Force | Out-Null
+    Write-Host "Created: ReasonixSync\$Name  (StartWhenAvailable = True, Actions=$($actions.Count))"
 }
 
 # Push：每天 10:00（脚本幂等，无变更零成本；关机错过 → 开机补跑，保证本周快照新鲜）
 New-RxTask -Name "Push" -Script "sync-push.py" -Trigger (New-ScheduledTaskTrigger -Daily -At 10:00)
 # Pull：每周一 10:30（拿到 dist 主版本；错过 → 开机补跑）
-New-RxTask -Name "Pull" -Script "sync-pull.py" -Trigger (New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday -At 10:30)
+# 跟随动作 sync-feedback.py：拉取后自动生成 feedback\pull-review-<周>-<本机名>.md 检查/反馈模板
+# （各机填写后主力机 Organize 时可见，见 README「Pull 后检查与反馈」）
+New-RxTask -Name "Pull" -Script "sync-pull.py" -Trigger (New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday -At 10:30) -Followup @("sync-feedback.py")
 if ($Organizer) {
     # Organize：仅主力机，每周五 11:00（汇总本周各机快照；错过 → 开机补跑）
     New-RxTask -Name "Organize" -Script "sync-organize.py" -Trigger (New-ScheduledTaskTrigger -Weekly -DaysOfWeek Friday -At 11:00)

@@ -102,17 +102,57 @@ def main() -> int:
                     shutil_copytree(str(dst), str(bk / "skills" / e.name))
                 else:
                     C.copy_file(dst, bk / "skills" / e.name)
-            C.copy_tree(e, dst)
+            if e.is_dir():
+                C.copy_tree(e, dst)
+            else:
+                # 单文件条目（如 .7z 附件）直接复制——修复台式机反馈 #3：copy_tree 对非目录返回 0 不落盘
+                C.copy_file(e, dst)
             pulled_s.append(e.name)
+
+    # ---- credential：dist\credential\<本机名>\ → 本机 global-workspace\credential\ ----
+    pulled_c: list[str] = []
+    dist_cred = root / "dist" / "credential"
+    machine = C.machine_name(C.load_config())
+    dc = dist_cred / machine
+    if dc.is_dir():
+        gw_cred = home / "global-workspace" / "credential"
+        gw_cred.mkdir(parents=True, exist_ok=True)
+        for f in sorted(dc.rglob("*")):
+            if f.is_dir():
+                continue
+            rel = f.relative_to(dc)
+            dst = gw_cred / rel
+            if dst.exists():
+                if C.file_sha256(dst) == C.file_sha256(f):
+                    continue
+                if bk is None:
+                    bk = C.backup_dir()
+                C.copy_file(dst, bk / "credential" / rel.name)
+            if C.copy_file(f, dst):
+                pulled_c.append(str(rel))
 
     print("== pull 摘要 ==")
     print(f"  拉取记忆 {len(pulled_f)} 条: {', '.join(pulled_f) or '-'}")
     print(f"  跳过(本机更新) {len(kept_f)} 条")
     print(f"  跳过(本机已归档) {len(skip_archived)} 条: {', '.join(skip_archived) or '-'}")
     print(f"  拉取技能 {len(pulled_s)} 个: {', '.join(pulled_s) or '-'}")
+    print(f"  拉取凭据 {len(pulled_c)} 个: {', '.join(pulled_c) or '-'}")
     if bk:
         print(f"  覆盖前备份: {bk}")
-    C.log("pull", f"pulled_facts={len(pulled_f)} kept={len(kept_f)} archived_skip={len(skip_archived)} pulled_skills={len(pulled_s)}")
+    C.log("pull", f"pulled_facts={len(pulled_f)} kept={len(kept_f)} archived_skip={len(skip_archived)} pulled_skills={len(pulled_s)} pulled_cred={len(pulled_c)}")
+
+    # ---- Pull 后自动生成检查/反馈模板（sync-feedback.py，2026-08-16 台式机建议落地）----
+    try:
+        fb = Path(__file__).resolve().parent / "sync-feedback.py"
+        if fb.exists():
+            import subprocess
+            r = subprocess.run([sys.executable, str(fb)], capture_output=True, text=True, encoding="utf-8")
+            if r.returncode == 0 and r.stdout.strip():
+                print(r.stdout.strip())
+            elif r.stderr.strip():
+                C.log("pull", f"feedback stderr: {r.stderr.strip()[:200]}")
+    except Exception as e:
+        C.log("pull", f"feedback generate skipped: {e}")
     return 0
 
 
