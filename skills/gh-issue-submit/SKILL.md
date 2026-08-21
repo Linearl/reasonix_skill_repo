@@ -132,6 +132,23 @@ unset GITHUB_TOKEN GH_TOKEN
 gh issue view <编号> --repo <owner>/<repo> --json number,title,state,url --jq '{number,title,state,url}'
 ```
 - 确认 state=OPEN、作者、标题正确。把 URL 汇报给用户。
+### 6.5 提交后更正：直接改正文，勿追加「更正评论」（2026-08-21 实测）
+
+issue **正文可编辑**——任何内容更正都应**直接改正文**，而不是在评论区追加一句"更正：上文第 X 节写错了…"。
+
+- **改正文**：
+  ```bash
+  gh issue edit <编号> --repo <owner>/<repo> --title "<新标题>" --body-file <正文文件>
+  ```
+  `--title` 与 `--body-file` 可单用或并用；若只需改某一段，取当前 body（`gh issue view <编号> --json body --jq '.body'`）改后写回。
+- **为什么不要追加"更正评论"**：正文一旦被编辑掉，那条更正评论就成了**指向已不存在旧文的过时评论**，反而制造"正文 vs 评论区对不上号"的混淆。
+- **清除已过时的更正评论**（GitHub 无 gh 子命令，用 REST DELETE）：
+  ```bash
+  gh api -X DELETE repos/<owner>/<repo>/issues/comments/<comment_id>
+  ```
+  评论 ID 见 `gh issue view <编号> --json comments --jq '.comments[]|{id,createdAt}'`。
+- 判断是否动手：**以正文为唯一权威**；除非是「保留讨论痕迹/回应某人」这类社交意图，更正一律走正文编辑。
+
 ### 7. PR 冲突处置：先查 supersede，再 rebase（2026-08-16 教训）
 
 PR 显示 `dirty`/`CONFLICTING` 时，**第一步永远是检查是否已被开发者自己合入/整合**——上游维护者常做"整合 PR"（把多个 open PR 的功能合并进自己的分支），此时相关 PR 应**关闭**而非 rebase，否则白干一场。
