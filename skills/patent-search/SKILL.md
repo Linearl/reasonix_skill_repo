@@ -32,14 +32,33 @@ description: 专利检索与可专利性分析：innojoy/Google Patents 自动�
 - **限流规避**（关键经验）：连续检索会报"请从首页开始检索"/"发生错误，请稍后重试"——**每个检索式用独立 Session 重新登录**，检索间 sleep 3~5s，失败按 5s/15s/30s 退避重试
 - **全文/摘要**：列表接口 ABST 为空；`LoadFullText` 触发图形验证码，不适合自动化。需要全文时用 Google Patents 或让用户从 innojoy 网页端下载 PDF
 - **数据库代码**：fmzl=发明、fmsq=发明申请、syxx=实用新型、wgzl=外观、CN="fmsq,wgzl,syxx,fmzl"、US="usapp,uspat,uspat1,usdes"、EP="epapp,eppat"、WO="wopat"
+- **⚠️ 严禁使用 `Database=ALL` / `--db ALL` / 检索范围选"全部"**：innojoy 没有 `ALL` 这个库代码，传 `ALL` 会导致 innojoy 检索不通；此时模型/工具可能**自行 fallback 到 CNIPA 官方通道**（PSS 系统），造成检索源错误、结果不一致。必须始终传**明确的库代码列表**（见下方正确示例）。
 - **字段代码**：TI=名称、ABST=摘要、PA/PATMS=申请人、INN/INNTMS=发明人、PNM=公开号、AN=申请号、AD=申请日、PD=公开日、DN=文档号、LLS=法律状态、DB=库代码
 
 ### 可用脚本
 工作区 `scripts/patent_search/innojoy_search.py`（登录+单条/批量检索+JSON 输出）+ `queries.txt`（检索式模板）。用法：
 ```bash
+# 单条检索（中国发明+实用新型，禁止用 ALL）
+INNOJOY_EMAIL=<账号> INNOJOY_PASSWORD=<密码> python innojoy_search.py \
+  --query "TI=(油烟机) and ABST=(烟感)" --db fmzl,fmsq,syxx --pages 1 --out result.json
+
+# 中国全部（发明+实用新型+外观）
+INNOJOY_EMAIL=<账号> INNOJOY_PASSWORD=<密码> python innojoy_search.py \
+  --query "TI=(油烟机) and ABST=(摄像头)" --db fmzl,fmsq,syxx,wgzl --pages 2 --out result.json
+
+# 全球库（中+美欧日韩）
+INNOJOY_EMAIL=<账号> INNOJOY_PASSWORD=<密码> python innojoy_search.py \
+  --query "TI=(range hood) and ABST=(camera)" --db fmsq,wgzl,syxx,fmzl,usapp,uspat,uspat1,usdes,epapp,eppat,wopat,jpapp,jppat,jputi,jpdes,krapp,krpat,kruti,krdes --pages 1 --out result.json
+
+# 批量检索（queries.txt 每行一条检索式）
 INNOJOY_EMAIL=<账号> INNOJOY_PASSWORD=<密码> python innojoy_search.py --list queries.txt --out results
 ```
 账号通过环境变量或 `--email/--password` 传入，**不要把密码写进代码/文档**。
+
+### innojoy 检索失败时的处理（重要）
+- **不要 fallback 到 CNIPA**：innojoy 不通时**严禁自动改走 CNIPA 官方通道**（PSS 系统）——两者数据源/界面/结果不一致，会造成检索失真。CNIPA 仅在用户明确要求时才使用。
+- 失败优先排查：① 数据库是否误传 `ALL`（改回明确库代码）② 登录态/验证码（失败 ≥3 次需验证码）③ 连续检索太快（每个检索式独立 Session + sleep 3~5s）④ 网络/代理（innojoy 是国内站，**不要走代理**）
+- 确认 innojoy 确实不可达后，辅助源用 **Google Patents**（不是 CNIPA），并在报告中注明"innojoy 不可达，改用 Google Patents 交叉验证"。
 
 ## 检索平台二：Google Patents
 
