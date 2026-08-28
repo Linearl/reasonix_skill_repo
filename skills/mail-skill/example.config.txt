@@ -1,0 +1,76 @@
+# Mail Skill Configuration
+# 请将此文件复制并重命名为 config.txt，然后填入你的邮箱信息
+
+# ============================================================
+# 邮箱账户配置
+# ============================================================
+
+# --- Account 1 ---
+MAIL_ACCOUNT_1_EMAIL=your_email@example.com
+# 密码请使用"应用专用密码（授权码）"，而不是你的登录密码
+MAIL_ACCOUNT_1_PASSWORD=your_app_password
+# 协议选择：imap（推荐）或 pop3
+# IMAP 支持文件夹、已读标记、移动等完整功能
+# POP3 只能收取收件箱，不支持文件夹和状态管理
+MAIL_ACCOUNT_1_PROTOCOL=imap
+MAIL_ACCOUNT_1_IMAP_SERVER=imap.example.com
+MAIL_ACCOUNT_1_IMAP_PORT=993
+MAIL_ACCOUNT_1_POP3_SERVER=pop.example.com
+MAIL_ACCOUNT_1_POP3_PORT=995
+MAIL_ACCOUNT_1_SMTP_SERVER=smtp.example.com
+MAIL_ACCOUNT_1_SMTP_PORT=465
+MAIL_ACCOUNT_1_USE_SSL=true
+
+# --- Account 2 (Optional: 如果有第二个邮箱，请取消注释并填写) ---
+# MAIL_ACCOUNT_2_EMAIL=another_email@example.com
+# MAIL_ACCOUNT_2_PASSWORD=another_app_password
+# MAIL_ACCOUNT_2_IMAP_SERVER=imap.example.com
+# MAIL_ACCOUNT_2_IMAP_PORT=993
+# MAIL_ACCOUNT_2_SMTP_SERVER=smtp.example.com
+# MAIL_ACCOUNT_2_SMTP_PORT=465
+# MAIL_ACCOUNT_2_USE_SSL=true
+
+# ============================================================
+# 存储配置
+# ============================================================
+
+# 数据存储根目录
+MAIL_STORAGE_ROOT=./mail_data
+# 附件存储路径
+MAIL_ATTACHMENT_PATH=./mail_data/attachments
+# 数据库路径
+MAIL_DB_PATH=./mail_data/mail_index.db
+
+# ============================================================
+# AI 功能配置（可选 — Agent 模式默认开启，无需外部 API Key）
+# ============================================================
+# Agent 模式（默认）：Agent (Claude) 原生提供 LLM 能力，无需配置任何 Key
+#   - ai-reply: 输出结构化邮件数据，Agent 自行撰写回复
+#   - summary-report: 按发件人分组输出，Agent 自行总结
+#   - 图片附件: 自动使用 vision-skill 识别内容
+# 外部 LLM 模式（可选）：配置以下 Key 后使用外部 API 直接调用
+#   - 更快的自动化回复、摘要、分类
+#   - 支持 OpenAI 兼容 API（DeepSeek、硅基流动、通义千问等）
+
+# --- 外部 LLM 配置（可选，不配置则使用 Agent 模式）---
+# LLM_API_KEY=your_api_key
+# LLM_API_BASE=https://api.openai.com/v1
+# LLM_MODEL_NAME=gpt-4o-mini
+# LLM_TIMEOUT=30
+
+# --- vision-skill 配置（可选）---
+# VISION_SKILL_PATH=~/.claude/skills/vision-skill
+
+# ============================================================
+# 常见邮箱服务器配置参考
+# ============================================================
+#
+# | 邮箱       | IMAP 服务器           | SMTP 服务器            |
+# |-----------|----------------------|-----------------------|
+# | QQ 邮箱   | imap.qq.com:993      | smtp.qq.com:465       |
+# | Gmail     | imap.gmail.com:993   | smtp.gmail.com:465    |
+# | 网易 163  | imap.163.com:993     | smtp.163.com:465      |
+# | Outlook   | outlook.office365.com:993 | smtp.office365.com:587 |
+#
+# 注意：大多数邮箱需要使用"应用专用密码"而非登录密码
+# 请在邮箱设置中开启 IMAP/SMTP 服务并生成授权码

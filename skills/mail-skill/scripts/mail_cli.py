@@ -1,0 +1,2531 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import json
+import logging
+import os
+import re
+import sys
+import tempfile
+import time
+import uuid
+import zipfile
+from datetime import datetime
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+from dotenv import load_dotenv
+
+try:
+    from jinja2 import Environment, FileSystemLoader
+    _JINJA2_AVAILABLE = True
+except ImportError:
+    _JINJA2_AVAILABLE = False
+    Environment = None  # type: ignore
+    FileSystemLoader = None  # type: ignore
+
+# Ensure the parent directory is in sys.path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from mail_manager.client import MailClient
+from mail_manager.config_manager import load_config
+from mail_manager.db import MailDatabase
+from mail_manager.detail import format_email_detail
+from mail_manager.errors import ErrorCodes, error_response, success_response
+from mail_manager.llm.client import LLMClient
+from mail_manager.query_parser import ParsedQuery, match_senders, parse_natural_query
+from mail_manager.summary_report import generate_email_summary_report
+from mail_manager.templates import TemplateManager
+
+if TYPE_CHECKING:
+    from mail_manager.client import MailClient
+    from mail_manager.db import MailDatabase
+
+# Setup logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
+
+# Task tracking for async fetch
+TASKS_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "mail_data", "tasks"
+)
+os.makedirs(TASKS_DIR, exist_ok=True)
+
+# Sender list cache for smart-search performance optimization
+_sender_cache: dict[str, tuple[float, list[str]]] = {}
+CACHE_TTL = 300  # 5 minutes
+
+
+def get_cached_senders(db: MailDatabase, account: str) -> list[str]:
+    """Get unique senders from database with caching.
+
+    Caches the sender list for 5 minutes to improve performance
+    on repeated smart-search calls.
+
+    Args:
+        db: MailDatabase instance
+        account: Account identifier for cache key
+
+    Returns:
+        list[str]: List of unique sender strings
+    """
+    cache_key = account
+    now = time.time()
+    if cache_key in _sender_cache:
+        cached_time, senders = _sender_cache[cache_key]
+        if now - cached_time < CACHE_TTL:
+            return senders
+    senders = db.get_unique_senders()
+    _sender_cache[cache_key] = (now, senders)
+    return senders
+
+
+def get_client(config: dict[str, Any], email_account: str | None = None) -> MailClient:
+    """Get a MailClient instance for the specified account."""
+    if not config["ACCOUNTS"]:
+        raise ValueError("No mail accounts configured in config.txt")
+
+    if email_account and email_account in config["ACCOUNTS"]:
+        account_config = config["ACCOUNTS"][email_account]
+    else:
+        # Use the first account
+        account_config = list(config["ACCOUNTS"].values())[0]
+
+    return MailClient(account_config)
+
+
+def _process_attachments(
+    attach_paths: list[str] | None, zip_as: str | None = None
+) -> list[str] | None:
+    """Process attachments: zip folders, or pack everything into one zip file."""
+    if not attach_paths:
+        return None
+
+    final_attachments: list[str] = []
+    temp_dir = tempfile.mkdtemp()
+    import atexit
+    import shutil
+    atexit.register(shutil.rmtree, temp_dir, ignore_errors=True)
+
+    if zip_as:
+        if not zip_as.endswith(".zip"):
+            zip_as += ".zip"
+        zip_path = os.path.join(temp_dir, zip_as)
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+            for path in attach_paths:
+                if not os.path.exists(path):
+                    logger.warning(f"Attachment path not found: {path}")
+                    continue
+                abs_path = os.path.abspath(path)
+                if os.path.isfile(abs_path):
+                    zipf.write(abs_path, arcname=os.path.basename(abs_path))
+                elif os.path.isdir(abs_path):
+                    parent_dir = os.path.dirname(abs_path)
+                    for root, _dirs, files in os.walk(abs_path):
+                        for file in files:
+                            file_path = os.path.join(root, file)
+                            rel_path = os.path.relpath(file_path, parent_dir)
+                            zipf.write(file_path, arcname=rel_path)
+        final_attachments.append(zip_path)
+    else:
+        for path in attach_paths:
+            if not os.path.exists(path):
+                logger.warning(f"Attachment path not found: {path}")
+                continue
+            abs_path = os.path.abspath(path)
+            if os.path.isfile(abs_path):
+                final_attachments.append(abs_path)
+            elif os.path.isdir(abs_path):
+                dir_name = os.path.basename(abs_path) or "folder"
+                zip_path = os.path.join(temp_dir, f"{dir_name}.zip")
+                with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+                    parent_dir = os.path.dirname(abs_path)
+                    for root, _dirs, files in os.walk(abs_path):
+                        for file in files:
+                            file_path = os.path.join(root, file)
+                            rel_path = os.path.relpath(file_path, parent_dir)
+                            zipf.write(file_path, arcname=rel_path)
+                final_attachments.append(zip_path)
+
+    return final_attachments
+
+
+def _get_account_paths(config: dict[str, Any], email_address: str | None) -> dict[str, str]:
+    """Generate isolated storage paths for a specific email account."""
+    if not email_address:
+        raise ValueError("Email address is required to get account paths")
+
+    # Sanitize email address for directory name.
+    # Replace special characters with underscore to match user's expected wuliang_at_chinamobile_com
+    safe_email = email_address.replace("@", "_at_").replace(".", "_")
+    # Remove any other characters that might be problematic, but keep alphanumeric, -, _, and @.
+    safe_email = "".join(
+        [c for c in safe_email if c.isalpha() or c.isdigit() or c in "-_"]
+    ).rstrip()
+
+    account_root = os.path.join(config["STORAGE_ROOT"], safe_email)
+
+    return {
+        "root": account_root,
+        "db_path": os.path.join(account_root, "mail_index.db"),
+        "attach_path": os.path.join(account_root, "attachments"),
+        "eml_path": os.path.join(account_root, "eml"),
+        "json_path": os.path.join(account_root, "json"),
+        "signature_path": os.path.join(account_root, "signature.md"),
+    }
+
+
+def _get_template_env() -> Environment:
+    """Get Jinja2 template environment."""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    tpl_dir = os.path.join(root, "references", "templates")
+    return Environment(loader=FileSystemLoader(tpl_dir), autoescape=False)
+
+
+def _render_table(template_name: str, context: dict[str, Any]) -> str:
+    """Render a table template with the given context."""
+    env = _get_template_env()
+    tpl = env.get_template(template_name)
+    return tpl.render(**context)
+
+
+def _run_fetch_task(task_id: str, config: dict[str, Any], db_path: str, args: Any) -> None:
+    """Run fetch task in background thread."""
+    task_file = os.path.join(TASKS_DIR, f"{task_id}.json")
+
+    def update_status(status: str, message: str = "", data: dict | None = None) -> None:
+        info: dict[str, Any] = {
+            "status": status,
+            "message": message,
+            "updated_at": datetime.now().isoformat(),
+        }
+        if data:
+            info.update(data)
+        with open(task_file, "w") as f:
+            json.dump(info, f)
+
+    try:
+        client = get_client(config, args.account)
+        paths = _get_account_paths(config, client.email)
+
+        # Override db_path with isolated db_path
+        db_path = paths["db_path"]
+
+        # Ensure directories exist
+        os.makedirs(paths["root"], exist_ok=True)
+        os.makedirs(paths["attach_path"], exist_ok=True)
+        os.makedirs(paths["eml_path"], exist_ok=True)
+        os.makedirs(paths["json_path"], exist_ok=True)
+
+        db = MailDatabase(db_path)
+        update_status("running", f"Connecting and fetching emails for {client.email}...")
+
+        # Fetch from server
+        emails = client.fetch_emails(
+            folder=args.folder,
+            limit=args.limit,
+            days_back=args.days,
+            unread_only=args.unread,
+            db_check_func=db.exists,
+        )
+
+        saved_count = 0
+        fetched_ids = []
+        for email_data in emails:
+            # Save EML
+            eml_filename = (
+                "".join(
+                    [
+                        c
+                        for c in email_data["message_id"]
+                        if c.isalpha() or c.isdigit() or c in "-_."
+                    ]
+                ).rstrip()
+                + ".eml"
+            )
+            eml_path = os.path.join(paths["eml_path"], eml_filename)
+            with open(eml_path, "wb") as f:
+                f.write(bytes(email_data["raw_email"]))
+            email_data["local_path_eml"] = eml_path
+
+            # Save attachments
+            db_attachments = []
+            if email_data["attachments"]:
+                att_dir = os.path.join(
+                    paths["attach_path"], email_data["message_id"].replace("/", "_")
+                )
+                os.makedirs(att_dir, exist_ok=True)
+
+                for att in email_data["attachments"]:
+                    if att.filename:
+                        att_path = os.path.join(att_dir, att.filename)
+                        with open(att_path, "wb") as f:
+                            f.write(att.payload)
+                        db_attachments.append(
+                            {
+                                "filename": att.filename,
+                                "content_type": att.content_type,
+                                "size": att.size,
+                                "local_path": att_path,
+                            }
+                        )
+            email_data["attachments"] = db_attachments
+
+            # Save JSON
+            json_filename = eml_filename.replace(".eml", ".json")
+            json_path = os.path.join(paths["json_path"], json_filename)
+
+            # Remove raw_email before saving JSON
+            json_data = {k: v for k, v in email_data.items() if k not in ["raw_email", "html_body"]}
+            # Convert datetime to string
+            if "date" in json_data and isinstance(json_data["date"], datetime):
+                json_data["date"] = json_data["date"].isoformat()
+
+            with open(json_path, "w", encoding="utf-8") as jf:
+                json.dump(json_data, jf, ensure_ascii=False, indent=2)
+            email_data["local_path_json"] = json_path
+
+            # Save to DB
+            db.save_email(email_data)
+            saved_count += 1
+            fetched_ids.append(email_data["message_id"])
+
+            # Update status periodically if many emails
+            if saved_count % 10 == 0:
+                update_status(
+                    "running",
+                    f"Saved {saved_count} of {len(emails)} emails...",
+                    {"progress": saved_count, "total": len(emails)},
+                )
+
+        update_status(
+            "completed",
+            "Fetch completed successfully.",
+            {"fetched_count": len(emails), "saved_count": saved_count, "fetched_ids": fetched_ids},
+        )
+    except Exception as e:
+        logger.error(f"Task {task_id} failed: {e}")
+        update_status("failed", str(e))
+
+
+def cmd_fetch(args: Any, config: dict[str, Any], db: MailDatabase) -> None:
+    """Fetch emails from server to local database."""
+    if args.limit > 100 and not args.confirm:
+        print(
+            json.dumps(
+                {
+                    "status": "requires_confirmation",
+                    "message": f"You requested to fetch {args.limit} emails. This may take a long time. Please run the command again with --confirm to proceed.",
+                }
+            )
+        )
+        return
+
+    task_id = str(uuid.uuid4())
+    task_file = os.path.join(TASKS_DIR, f"{task_id}.json")
+
+    # Initialize task file
+    with open(task_file, "w") as f:
+        json.dump(
+            {
+                "status": "starting",
+                "message": "Initializing fetch task...",
+                "updated_at": datetime.now().isoformat(),
+            },
+            f,
+        )
+
+    # Use multiprocessing to ensure it runs even if parent exits
+    import multiprocessing
+
+    p = multiprocessing.Process(
+        target=_run_fetch_task, args=(task_id, config, config["DB_PATH"], args)
+    )
+    p.start()
+
+    # Return immediately to the LLM
+    print(
+        json.dumps(
+            {
+                "status": "started",
+                "task_id": task_id,
+                "message": "Fetch task started in the background. Use the 'fetch-status' command to check progress.",
+            }
+        )
+    )
+
+
+def cmd_fetch_status(args: Any, config: dict[str, Any], db: MailDatabase) -> None:
+    """Check status of a background fetch task."""
+    task_file = os.path.join(TASKS_DIR, f"{args.task_id}.json")
+    if not os.path.exists(task_file):
+        print(json.dumps(error_response(ErrorCodes.USER_EMAIL_NOT_FOUND, "Task not found")))
+        return
+
+    with open(task_file) as f:
+        data = json.load(f)
+
+    print(json.dumps(data, indent=2))
+
+
+def cmd_search(args: Any, config: dict[str, Any], db: MailDatabase) -> None:
+    """Search emails using FTS, vector, or hybrid search."""
+    # Determine the isolated db_path
+    client = get_client(config, getattr(args, "account", None))
+    paths = _get_account_paths(config, client.email)
+    isolated_db = MailDatabase(paths["db_path"])
+
+    # Get classification filters
+    importance = getattr(args, "importance", None)
+    category = getattr(args, "category", None)
+    tag_filter = getattr(args, "tag", None)
+
+    if args.query:
+        if getattr(args, "hybrid", False):
+            results = isolated_db.search_hybrid(args.query, limit=args.limit)
+        elif getattr(args, "vector", False):
+            results = isolated_db.search_vector(args.query, limit=args.limit)
+        else:
+            results = isolated_db.search_fts(args.query, limit=args.limit)
+
+        filtered = []
+        for r in results:
+            if args.folder and r.get("folder") != args.folder:
+                continue
+            if args.sender and args.sender not in (r.get("sender") or ""):
+                continue
+            if args.subject and args.subject not in (r.get("subject") or ""):
+                continue
+            if args.is_read is not None and int(bool(r.get("is_read"))) != int(args.is_read):
+                continue
+            if args.has_attachment is not None and int(bool(r.get("has_attachment"))) != int(
+                args.has_attachment
+            ):
+                continue
+            if importance and r.get("importance") != importance:
+                continue
+            if category and r.get("category") != category:
+                continue
+            # Filter by tag (labels are stored as JSON list)
+            if tag_filter:
+                labels = r.get("labels", [])
+                if not isinstance(labels, list):
+                    labels = []
+                if tag_filter not in labels:
+                    continue
+            filtered.append(r)
+        results = filtered
+    else:
+        results = isolated_db.search_emails(
+            query=None,
+            account=args.account,
+            folder=args.folder,
+            sender=args.sender,
+            subject=args.subject,
+            is_read=args.is_read,
+            has_attachment=args.has_attachment,
+            importance=importance,
+            category=category,
+            limit=args.limit,
+        )
+
+        # Apply tag filter after fetching
+        if tag_filter:
+            filtered = []
+            for r in results:
+                labels = r.get("labels", [])
+                if not isinstance(labels, list):
+                    labels = []
+                if tag_filter in labels:
+                    filtered.append(r)
+            results = filtered
+
+    # Format output
+    output = []
+    for r in results:
+        # Convert datetime to string if needed
+        output.append(
+            {
+                "message_id": r["message_id"],
+                "subject": r["subject"],
+                "sender": r["sender"],
+                "date": r["date"],
+                "folder": r["folder"],
+                "is_read": r["is_read"],
+                "importance": r.get("importance", "normal"),
+                "category": r.get("category", "uncategorized"),
+                "tags": r.get("labels", []),
+                "snippet": r["body_text"][:100] + "..."
+                if r["body_text"] and len(r["body_text"]) > 100
+                else r["body_text"],
+            }
+        )
+
+    print(
+        json.dumps(
+            success_response(data={"count": len(results), "results": output}),
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+
+
+def cmd_smart_search(args: Any, config: dict[str, Any], db: MailDatabase) -> None:
+    """Search emails using natural language query.
+
+    Parses the natural language query to extract date range, sender, and keywords,
+    then executes appropriate search based on the extracted components.
+
+    Args:
+        args: Command line arguments with 'query' field containing natural language query
+        config: Configuration dictionary
+        db: MailDatabase instance (not used, we create isolated one per account)
+    """
+    from datetime import date
+
+    # Determine the isolated db_path
+    client = get_client(config, getattr(args, "account", None))
+    paths = _get_account_paths(config, client.email)
+    isolated_db = MailDatabase(paths["db_path"])
+
+    # Parse natural language query
+    parsed: ParsedQuery = parse_natural_query(args.query, date.today())
+
+    # Get unique senders for fuzzy matching
+    senders = get_cached_senders(isolated_db, client.email)
+
+    # Match sender if extracted
+    matched_senders: list[str] = []
+    if parsed.sender:
+        matched_senders = match_senders(parsed.sender, senders)
+
+    # Build search parameters
+    date_from: str | None = None
+    date_to: str | None = None
+    if parsed.date_range:
+        date_from = parsed.date_range.date_from.isoformat()
+        date_to = parsed.date_range.date_to.isoformat()
+
+    # Execute search
+    results: list[dict]
+    if parsed.keywords:
+        # Use hybrid search for semantic matching
+        results = isolated_db.search_hybrid(parsed.keywords, limit=args.limit)
+        # Apply filters
+        if date_from or date_to or matched_senders:
+            filtered = []
+            for r in results:
+                if date_from and r.get("date") and r.get("date", "")[:10] < date_from[:10]:
+                    continue
+                if date_to and r.get("date") and r.get("date", "")[:10] > date_to[:10]:
+                    continue
+                if matched_senders:
+                    sender_match = False
+                    for ms in matched_senders:
+                        if ms in (r.get("sender") or ""):
+                            sender_match = True
+                            break
+                    if not sender_match:
+                        continue
+                filtered.append(r)
+            results = filtered
+    else:
+        # Use structured search with filters only
+        # For multiple matched senders, search each and combine
+        if matched_senders:
+            results = []
+            for sender in matched_senders:
+                sender_results = isolated_db.search_emails(
+                    date_from=date_from,
+                    date_to=date_to,
+                    sender=sender,
+                    limit=args.limit,
+                )
+                for r in sender_results:
+                    if r not in results:
+                        results.append(r)
+        else:
+            results = isolated_db.search_emails(
+                date_from=date_from,
+                date_to=date_to,
+                limit=args.limit,
+            )
+
+    # Format output
+    output = []
+    for r in results[: args.limit]:
+        output.append(
+            {
+                "message_id": r["message_id"],
+                "subject": r["subject"],
+                "sender": r["sender"],
+                "date": r["date"],
+                "folder": r["folder"],
+                "is_read": r["is_read"],
+                "snippet": r["body_text"][:100] + "..."
+                if r["body_text"] and len(r["body_text"]) > 100
+                else r["body_text"],
+            }
+        )
+
+    # Build parsed_query response
+    parsed_query_response = {
+        "original": parsed.original_query,
+        "date_range": {"from": date_from, "to": date_to} if date_from or date_to else None,
+        "sender": matched_senders if matched_senders else None,
+        "keywords": parsed.keywords,
+    }
+
+    print(
+        json.dumps(
+            success_response(
+                data={
+                    "parsed_query": parsed_query_response,
+                    "count": len(output),
+                    "results": output,
+                }
+            ),
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+
+
+def cmd_read(args: Any, config: dict[str, Any], db: MailDatabase) -> None:
+    """Read an email by message_id."""
+    # Determine the isolated db_path
+    client = get_client(config, getattr(args, "account", None))
+    paths = _get_account_paths(config, client.email)
+    isolated_db = MailDatabase(paths["db_path"])
+
+    email = isolated_db.get_email(args.message_id)
+    if not email:
+        print(
+            json.dumps(error_response(ErrorCodes.USER_EMAIL_NOT_FOUND, "Email not found locally"))
+        )
+        return
+
+    # Use enhanced detail view by default, brief view with --brief flag
+    if getattr(args, "brief", False):
+        # Legacy table view
+        table_md = _render_table(
+            "email_table.md.j2",
+            {
+                "rows": [
+                    {
+                        "sender": email.get("sender", ""),
+                        "recipient": email.get("recipient", ""),
+                        "cc": email.get("cc", ""),
+                        "date": email.get("date", ""),
+                        "subject": email.get("subject", ""),
+                        "snippet": (email.get("body_text", "") or "")[:200]
+                        .replace("\n", " ")
+                        .replace("\r", ""),
+                        "attachments": [
+                            att.get("local_path") for att in email.get("attachments", [])
+                        ],
+                    }
+                ]
+            },
+        )
+        print(table_md)
+    else:
+        # Enhanced detail view with Markdown formatting
+        thread_timeline = isolated_db.get_thread_timeline(args.message_id)
+
+        detail_md = format_email_detail(
+            email=email,
+            db=isolated_db,
+            include_attachment_summary=getattr(args, "attachment_summary", False),
+            thread_timeline=thread_timeline,
+        )
+        print(detail_md)
+
+
+def _append_signature(
+    body_text: str, html_body: str | None, signature_path: str
+) -> tuple[str, str | None]:
+    """Append signature to the email body if the signature file exists and is not empty."""
+    # Also support a fallback to just using the email address as the folder name
+    # In case the directory wasn't sanitized with _at_
+    # Replace _at_ first, then domain separators (order matters to avoid partial matches)
+    fallback_path = signature_path.replace("_at_", "@")
+    # Replace _dot_ segments safely
+    for domain_part in ("com", "net", "cn", "org", "edu", "gov", "io"):
+        fallback_path = fallback_path.replace(f"_{domain_part}", f".{domain_part}")
+
+    actual_path = signature_path
+    if not os.path.exists(actual_path):
+        # Try the raw email format if the sanitized one doesn't exist
+        alt_path = os.path.join(
+            os.path.dirname(os.path.dirname(signature_path)),
+            os.path.basename(os.path.dirname(fallback_path)),
+            "signature.md",
+        )
+        if os.path.exists(alt_path):
+            actual_path = alt_path
+        else:
+            return body_text, html_body
+
+    try:
+        with open(actual_path, encoding="utf-8") as f:
+            signature = f.read().strip()
+    except Exception as e:
+        logger.warning(f"Failed to read signature file {actual_path}: {e}")
+        return body_text, html_body
+
+    if not signature:
+        return body_text, html_body
+
+    # Append to plain text
+    new_body_text = f"{body_text}\n\n--\n{signature}"
+
+    # Append to HTML if it exists
+    new_html_body = html_body
+    if html_body:
+        try:
+            import markdown  # type: ignore[import-untyped]
+            html_signature = markdown.markdown(signature)
+        except ImportError:
+            html_signature = ""
+        if "</body>" in html_body.lower():
+            # Insert before closing body tag
+            import re
+
+            new_html_body = re.sub(
+                r"(</body>)",
+                rf'<br><br><div class="email-signature" style="color: #888; font-size: 0.9em; border-top: 1px solid #eee; padding-top: 10px; margin-top: 20px;">{html_signature}</div>\1',
+                html_body,
+                flags=re.IGNORECASE,
+            )
+        else:
+            new_html_body = f'{html_body}<br><br><div class="email-signature" style="color: #888; font-size: 0.9em; border-top: 1px solid #eee; padding-top: 10px; margin-top: 20px;">{html_signature}</div>'
+
+    return new_body_text, new_html_body
+
+
+def _markdown_to_html(md_text: str) -> str:
+    """Convert markdown text to styled HTML for emails."""
+    try:
+        import markdown  # type: ignore[import-untyped]
+    except ImportError:
+        return ""
+    html_content = markdown.markdown(md_text, extensions=["tables", "fenced_code", "nl2br"])
+    # Render with our template
+    try:
+        return _render_table("email_theme.html.j2", {"content": html_content})
+    except Exception as e:
+        logger.warning(f"Could not load HTML template, using raw HTML: {e}")
+        return html_content
+
+
+def cmd_templates(args: Any, config: dict[str, Any], db: MailDatabase) -> None:
+    """Manage email templates."""
+    client = get_client(config, getattr(args, "account", None))
+    paths = _get_account_paths(config, client.email)
+    templates_dir = os.path.join(paths["root"], "templates")
+
+    manager = TemplateManager(templates_dir)
+
+    if args.template_command == "list":
+        templates = manager.list_templates()
+        print(json.dumps(success_response(data={"templates": templates})))
+    elif args.template_command == "show":
+        try:
+            template = manager.get_template(args.name)
+            print(
+                json.dumps(
+                    success_response(
+                        data={
+                            "name": template.name,
+                            "content": template.content,
+                            "required_vars": template.required_vars,
+                            "optional_vars": template.optional_vars,
+                        }
+                    )
+                )
+            )
+        except FileNotFoundError:
+            print(json.dumps(error_response(ErrorCodes.USER_EMAIL_NOT_FOUND, "Template not found")))
+    elif args.template_command == "create":
+        try:
+            content = args.content
+            required_vars = args.required_vars.split(",") if args.required_vars else None
+            template = manager.create_template(args.name, content, required_vars)
+            print(
+                json.dumps(
+                    success_response(
+                        data={
+                            "name": template.name,
+                            "required_vars": template.required_vars,
+                        }
+                    )
+                )
+            )
+        except Exception as e:
+            print(json.dumps(error_response(ErrorCodes.INTERNAL_ERROR, str(e))))
+
+
+def cmd_send(args: Any, config: dict[str, Any], db: MailDatabase) -> None:
+    """Send a new email."""
+    client = get_client(config, getattr(args, "account", None))
+    paths = _get_account_paths(config, client.email)
+
+    try:
+        # Replace literal "\n" strings with actual newline characters
+        # This handles cases where AI passes "Line 1\nLine 2" as a single string argument
+        body_text = args.body.replace("\\n", "\n")
+        user_html = getattr(args, "html_body", None)
+        html_body = user_html if user_html else _markdown_to_html(body_text)
+
+        # Append signature
+        body_text, html_body = _append_signature(body_text, html_body, paths["signature_path"])
+
+        attachments = _process_attachments(args.attach, getattr(args, "zip_as", None))
+
+        client.send_email(
+            to=args.to,
+            subject=args.subject,
+            body_text=body_text,
+            html_body=html_body,
+            cc=args.cc,
+            bcc=args.bcc,
+            attachments=attachments,
+        )
+        print(json.dumps(success_response(message="Email sent")))
+    except Exception as e:
+        print(json.dumps(error_response(ErrorCodes.SERVER_SMTP_SEND_FAILED, str(e))))
+
+
+def cmd_reply(args: Any, config: dict[str, Any], db: MailDatabase) -> None:
+    """Reply to an existing email."""
+    import email.utils
+
+    client = get_client(config, getattr(args, "account", None))
+    paths = _get_account_paths(config, client.email)
+    isolated_db = MailDatabase(paths["db_path"])
+
+    orig_email = isolated_db.get_email(args.message_id)
+    if not orig_email:
+        print(
+            json.dumps(error_response(ErrorCodes.USER_EMAIL_NOT_FOUND, "Email not found locally"))
+        )
+        return
+
+    if not client.email:
+        print(
+            json.dumps(
+                error_response(ErrorCodes.BIZ_ACCOUNT_NOT_CONFIGURED, "No email account configured")
+            )
+        )
+        return
+
+    my_email = client.email.lower()
+
+    orig_sender = orig_email.get("sender", "")
+    orig_to = orig_email.get("recipient", "")
+    orig_cc = orig_email.get("cc", "")
+
+    sender_addrs = email.utils.getaddresses([orig_sender]) if orig_sender else []
+    to_addrs = email.utils.getaddresses([orig_to]) if orig_to else []
+    cc_addrs = email.utils.getaddresses([orig_cc]) if orig_cc else []
+
+    reply_to_addrs = []
+    # Always reply to the original sender
+    for name, addr in sender_addrs:
+        if addr and addr.lower() != my_email:
+            reply_to_addrs.append(email.utils.formataddr((name, addr)))
+
+    # Fallback if we sent the original email to someone else
+    if not reply_to_addrs:
+        for name, addr in to_addrs:
+            if addr and addr.lower() != my_email:
+                reply_to_addrs.append(email.utils.formataddr((name, addr)))
+
+    reply_cc_addrs = []
+    if args.all:
+        # Add other original 'To' recipients to our 'To' list
+        for name, addr in to_addrs:
+            fmt = email.utils.formataddr((name, addr))
+            if addr and addr.lower() != my_email and fmt not in reply_to_addrs:
+                reply_to_addrs.append(fmt)
+        # Add original 'Cc' recipients to our 'Cc' list
+        for name, addr in cc_addrs:
+            fmt = email.utils.formataddr((name, addr))
+            if (
+                addr
+                and addr.lower() != my_email
+                and fmt not in reply_to_addrs
+                and fmt not in reply_cc_addrs
+            ):
+                reply_cc_addrs.append(fmt)
+
+    subject = orig_email.get("subject", "")
+    if not subject.lower().startswith("re:"):
+        subject = "Re: " + subject
+
+    orig_msg_id = orig_email.get("message_id")
+
+    try:
+        body_text = args.body.replace("\\n", "\n")
+
+        # Append original email history to body text
+        orig_date = orig_email.get("date", "") or ""
+        orig_sender_full = orig_email.get("sender", "") or ""
+        orig_body = orig_email.get("body_text", "") or ""
+
+        history_separator = f"\n\n--- Original Message ---\nFrom: {orig_sender_full}\nDate: {orig_date}\nTo: {orig_to}\nSubject: {orig_email.get('subject', '')}\n\n"
+
+        # Add "> " prefix to original body for blockquote style in plain text
+        quoted_orig_body = "\n".join([f"> {line}" for line in orig_body.split("\n")])
+        body_text_with_history = body_text + history_separator + quoted_orig_body
+
+        # ALWAYS auto-convert markdown body to HTML to ensure beautiful formatting
+        html_reply_part = _markdown_to_html(body_text)
+
+        # Format history for HTML
+        html_history = f"""
+        <br><br>
+        <div class="gmail_quote" style="border-left: 1px solid #ccc; padding-left: 1ex; margin-left: 1ex; color: #555;">
+            <div dir="ltr">
+                <br>--- Original Message ---<br>
+                <b>From:</b> {orig_sender_full}<br>
+                <b>Date:</b> {orig_date}<br>
+                <b>To:</b> {orig_to}<br>
+                <b>Subject:</b> {orig_email.get("subject", "")}<br>
+            </div>
+            <br>
+            <div>
+                {orig_body.replace(chr(10), "<br>")}
+            </div>
+        </div>
+        """
+
+        # If the template conversion returned a full HTML doc, insert before </body>
+        html_body: str
+        if "</body>" in html_reply_part.lower():
+            import re
+
+            html_body = re.sub(
+                r"(</body>)", rf"{html_history}\1", html_reply_part, flags=re.IGNORECASE
+            )
+        else:
+            html_body = html_reply_part + html_history
+
+        # Append signature
+        body_text_with_history, html_body_result = _append_signature(
+            body_text_with_history, html_body, paths["signature_path"]
+        )
+        # We know html_body_result is str because we passed a non-None html_body
+        html_body = html_body_result or html_body
+
+        attachments = _process_attachments(args.attach, getattr(args, "zip_as", None))
+
+        client.send_email(
+            to=reply_to_addrs,
+            subject=subject,
+            body_text=body_text_with_history,
+            html_body=html_body,
+            cc=reply_cc_addrs if reply_cc_addrs else None,
+            attachments=attachments,
+            in_reply_to=orig_msg_id,
+            references=orig_msg_id,
+        )
+        print(
+            json.dumps(
+                success_response(
+                    data={"to": reply_to_addrs, "cc": reply_cc_addrs}, message="Reply sent"
+                )
+            )
+        )
+    except Exception as e:
+        print(json.dumps(error_response(ErrorCodes.SERVER_SMTP_SEND_FAILED, str(e))))
+
+
+def cmd_mark(args: Any, config: dict[str, Any], db: MailDatabase) -> None:
+    """Mark email as read/unread or starred."""
+    # Determine the isolated db_path
+    client_init = get_client(config, getattr(args, "account", None))
+    paths = _get_account_paths(config, client_init.email)
+    isolated_db = MailDatabase(paths["db_path"])
+
+    email = isolated_db.get_email(args.message_id)
+    if not email:
+        print(
+            json.dumps(error_response(ErrorCodes.USER_EMAIL_NOT_FOUND, "Email not found locally"))
+        )
+        return
+
+    client = get_client(config, email["account"])
+
+    try:
+        imap_uid = email.get("imap_uid")
+        if not imap_uid:
+            print(
+                json.dumps(
+                    error_response(
+                        ErrorCodes.USER_INVALID_MESSAGE_ID,
+                        "Cannot mark email on server: missing imap_uid in database. Please fetch emails again.",
+                    )
+                )
+            )
+            return
+
+        if args.read is not None:
+            is_read = bool(args.read)
+            client.mark_as_read([str(imap_uid)], email["folder"], is_read)
+            isolated_db.update_flags(args.message_id, is_read=is_read)
+
+        if args.starred is not None:
+            is_starred = bool(args.starred)
+            client.mark_as_starred([str(imap_uid)], email["folder"], is_starred)
+            isolated_db.update_flags(args.message_id, is_starred=is_starred)
+
+        print(json.dumps(success_response(message="Flags updated")))
+    except Exception as e:
+        print(json.dumps(error_response(ErrorCodes.SERVER_IMAP_CONNECTION_FAILED, str(e))))
+
+
+def cmd_move(args: Any, config: dict[str, Any], db: MailDatabase) -> None:
+    """Move email to another folder."""
+    # Determine the isolated db_path
+    client_init = get_client(config, getattr(args, "account", None))
+    paths = _get_account_paths(config, client_init.email)
+    isolated_db = MailDatabase(paths["db_path"])
+
+    email = isolated_db.get_email(args.message_id)
+    if not email:
+        print(
+            json.dumps(error_response(ErrorCodes.USER_EMAIL_NOT_FOUND, "Email not found locally"))
+        )
+        return
+
+    client = get_client(config, email["account"])
+
+    try:
+        imap_uid = email.get("imap_uid")
+        if not imap_uid:
+            print(
+                json.dumps(
+                    error_response(
+                        ErrorCodes.USER_INVALID_MESSAGE_ID,
+                        "Cannot move email on server: missing imap_uid in database. Please fetch emails again.",
+                    )
+                )
+            )
+            return
+
+        client.move_emails([str(imap_uid)], args.target_folder, email["folder"])
+        isolated_db.update_flags(args.message_id, folder=args.target_folder)
+        print(json.dumps(success_response(message=f"Moved to {args.target_folder}")))
+    except Exception as e:
+        print(json.dumps(error_response(ErrorCodes.SERVER_IMAP_CONNECTION_FAILED, str(e))))
+
+
+def cmd_delete(args: Any, config: dict[str, Any], db: MailDatabase) -> None:
+    """Delete an email."""
+    # Determine the isolated db_path
+    client_init = get_client(config, getattr(args, "account", None))
+    paths = _get_account_paths(config, client_init.email)
+    isolated_db = MailDatabase(paths["db_path"])
+
+    email = isolated_db.get_email(args.message_id)
+    if not email:
+        print(
+            json.dumps(error_response(ErrorCodes.USER_EMAIL_NOT_FOUND, "Email not found locally"))
+        )
+        return
+
+    client = get_client(config, email["account"])
+
+    try:
+        imap_uid = email.get("imap_uid")
+        if not imap_uid:
+            print(
+                json.dumps(
+                    error_response(
+                        ErrorCodes.USER_INVALID_MESSAGE_ID,
+                        "Cannot delete email on server: missing imap_uid in database. Please fetch emails again.",
+                    )
+                )
+            )
+            return
+
+        client.delete_emails([str(imap_uid)], email["folder"])
+        isolated_db.delete_email(args.message_id)
+        print(json.dumps(success_response(message="Email deleted")))
+    except Exception as e:
+        print(json.dumps(error_response(ErrorCodes.SERVER_IMAP_CONNECTION_FAILED, str(e))))
+
+
+def cmd_export(args: Any, config: dict[str, Any], db: MailDatabase) -> None:
+    """Export emails to JSON or CSV file."""
+    # Determine the isolated db_path
+    client = get_client(config, getattr(args, "account", None))
+    paths = _get_account_paths(config, client.email)
+    isolated_db = MailDatabase(paths["db_path"])
+
+    results = isolated_db.search_emails(limit=10000)  # Get all
+    if args.format == "json":
+        with open(args.output, "w", encoding="utf-8") as f:
+            json.dump(results, f, ensure_ascii=False, indent=2)
+    elif args.format == "csv":
+        import csv
+
+        with open(args.output, "w", newline="", encoding="utf-8") as f:
+            if not results:
+                return
+            writer = csv.DictWriter(
+                f,
+                fieldnames=[
+                    "message_id",
+                    "account",
+                    "subject",
+                    "sender",
+                    "recipient",
+                    "date",
+                    "folder",
+                    "is_read",
+                ],
+            )
+            writer.writeheader()
+            for r in results:
+                writer.writerow(
+                    {
+                        "message_id": r["message_id"],
+                        "account": r["account"],
+                        "subject": r["subject"],
+                        "sender": r["sender"],
+                        "recipient": r["recipient"],
+                        "date": r["date"],
+                        "folder": r["folder"],
+                        "is_read": r["is_read"],
+                    }
+                )
+    print(json.dumps(success_response(message=f"Exported {len(results)} emails to {args.output}")))
+
+
+def cmd_attachments(args: Any, config: dict[str, Any], db: MailDatabase) -> None:
+    """List attachments with file paths."""
+    client = get_client(config, getattr(args, "account", None))
+    paths = _get_account_paths(config, client.email)
+    isolated_db = MailDatabase(paths["db_path"])
+
+    results = isolated_db.search_emails(has_attachment=True, limit=args.limit)
+
+    attachments_list: list[dict[str, Any]] = []
+    for email in results:
+        for att in email.get("attachments", []):
+            local_path = att.get("local_path", "")
+            if local_path:
+                abs_path = (
+                    os.path.abspath(local_path) if not os.path.isabs(local_path) else local_path
+                )
+                attachments_list.append(
+                    {
+                        "filename": att.get("filename"),
+                        "size": att.get("size"),
+                        "content_type": att.get("content_type"),
+                        "message_id": email.get("message_id"),
+                        "subject": email.get("subject"),
+                        "local_path": abs_path,
+                    }
+                )
+
+    print(
+        json.dumps(
+            success_response(
+                data={
+                    "count": len(attachments_list),
+                    "attachments": attachments_list,
+                },
+                message=f"Found {len(attachments_list)} attachments",
+            ),
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+
+
+def cmd_summarize(args: Any, config: dict[str, Any], db: MailDatabase) -> None:
+    """Summarize emails using LLM."""
+    # Determine the isolated db_path
+    client = get_client(config, getattr(args, "account", None))
+    paths = _get_account_paths(config, client.email)
+    isolated_db = MailDatabase(paths["db_path"])
+
+    # If a task ID is provided, load its fetched IDs to summarize only those
+    fetched_ids = []
+    if args.task_id:
+        task_file = os.path.join(TASKS_DIR, f"{args.task_id}.json")
+        if os.path.exists(task_file):
+            with open(task_file) as f:
+                data = json.load(f)
+                fetched_ids = data.get("fetched_ids", [])
+
+    if fetched_ids:
+        emails = [e for msg_id in fetched_ids if (e := isolated_db.get_email(msg_id)) is not None]
+    else:
+        # Fallback to recent emails if no task ID or it had no ids
+        emails = isolated_db.search_emails(limit=args.limit)
+
+    if not emails:
+        print("未找到需要总结的邮件。")
+        return
+
+    # Categorize emails
+    important_emails = []
+    verification_emails = []
+    action_required_emails = []
+    other_emails = []
+
+    important_keywords = [
+        "重要",
+        "紧急",
+        "urgent",
+        "important",
+        "通知",
+        "账单",
+        "合同",
+        "面试",
+        "offer",
+    ]
+    verification_keywords = ["验证码", "activation code", "verify", "code", "安全码"]
+    action_keywords = ["回复", "确认", "请查收", "跟进", "action required", "please reply"]
+
+    for email in emails:
+        subject = email.get("subject", "").lower()
+        body = email.get("body_text", "").lower()
+        snippet = body[:150].replace("\n", " ").replace("\r", "") + "..." if body else ""
+
+        email_info = {
+            "id": email.get("message_id"),
+            "subject": email.get("subject", "无主题"),
+            "sender": email.get("sender", "未知发件人"),
+            "date": email.get("date", "")[:10] if email.get("date") else "",
+            "snippet": snippet,
+        }
+
+        is_categorized = False
+
+        # 1. Check for verification codes
+        if any(kw in subject or kw in body[:500] for kw in verification_keywords):
+            # Try to extract the code using a simple regex (4-6 digits)
+            code_match = re.search(r"\b\d{4,6}\b", body[:500])
+            if code_match:
+                email_info["code"] = code_match.group()
+            verification_emails.append(email_info)
+            is_categorized = True
+
+        # 2. Check for action required
+        elif any(kw in subject or kw in body[:200] for kw in action_keywords):
+            action_required_emails.append(email_info)
+            is_categorized = True
+
+        # 3. Check for important
+        elif any(kw in subject for kw in important_keywords):
+            important_emails.append(email_info)
+            is_categorized = True
+
+        # 4. Others
+        if not is_categorized:
+            other_emails.append(email_info)
+
+    # Generate Markdown Report
+    report = [
+        f"## 📧 邮件收取简报 ({datetime.now().strftime('%Y-%m-%d %H:%M')})",
+        f"**总体汇总**：本次共收取/分析了 **{len(emails)}** 封邮件。",
+        "---",
+    ]
+
+    if verification_emails:
+        report.append("### 🔑 验证码与登录凭证")
+        for e in verification_emails:
+            code_str = f" **[提取码: {e.get('code')}]**" if "code" in e else ""
+            report.append(f"- **{e['sender']}**: {e['subject']}{code_str}")
+        report.append("")
+
+    if important_emails:
+        report.append("### 🚨 疑似重要邮件 (需优先关注)")
+        for e in important_emails:
+            report.append(f"- **{e['sender']}**: {e['subject']}")
+            report.append(f"  > *摘要: {e['snippet']}*")
+        report.append("")
+
+    if action_required_emails:
+        report.append("### ⏳ 待回复/待处理邮件")
+        for e in action_required_emails:
+            report.append(f"- **{e['sender']}**: {e['subject']}")
+        report.append("")
+
+    if other_emails:
+        report.append("### 📩 其他常规邮件")
+        for e in other_emails[:5]:  # Only show top 5 others to avoid clutter
+            report.append(f"- {e['sender']}: {e['subject']}")
+        if len(other_emails) > 5:
+            report.append(f"- *(还有 {len(other_emails) - 5} 封常规邮件未展示)*")
+
+    report.append("\n*提示: 您可以通过 `read <message_id>` 查看上述任一邮件的完整内容。*")
+
+    print("\n".join(report))
+
+
+def cmd_thread(args: Any, config: dict[str, Any], db: MailDatabase) -> None:
+    """Display email thread timeline with enhanced sender/recipient matching."""
+    from mail_manager.thread_manager import get_enhanced_thread_timeline, format_thread_view
+
+    client = get_client(config, getattr(args, "account", None))
+    paths = _get_account_paths(config, client.email)
+    isolated_db = MailDatabase(paths["db_path"])
+
+    # Use enhanced thread timeline with sender/recipient matching
+    timeline = get_enhanced_thread_timeline(
+        db=isolated_db,
+        seed_message_id=args.message_id,
+        include_sender_thread=True,
+    )
+    if not timeline:
+        print("未找到关联邮件线程。")
+        return
+
+    # Use enhanced thread view formatting
+    if getattr(args, "summary", False):
+        from mail_manager.llm.client import LLMClient, is_external_llm_configured
+
+        if is_external_llm_configured():
+            llm_client = LLMClient()
+            output = format_thread_view(
+                timeline=timeline,
+                current_message_id=args.message_id,
+                llm_client=llm_client,
+            )
+        else:
+            # Agent mode: output timeline without LLM summary
+            output = format_thread_view(
+                timeline=timeline,
+                current_message_id=args.message_id,
+            )
+    else:
+        output = format_thread_view(
+            timeline=timeline,
+            current_message_id=args.message_id,
+        )
+    print(output)
+
+
+def cmd_batch_mark(args: Any, config: dict[str, Any], db: MailDatabase) -> None:
+    """Batch mark multiple emails as read/unread or starred."""
+    client = get_client(config, getattr(args, "account", None))
+    paths = _get_account_paths(config, client.email)
+    isolated_db = MailDatabase(paths["db_path"])
+
+    # Validate at least one flag specified
+    if args.read is None and args.starred is None:
+        print(
+            json.dumps(
+                error_response(
+                    ErrorCodes.USER_MISSING_PARAMETER,
+                    "At least one flag (--read or --starred) must be specified",
+                )
+            )
+        )
+        return
+
+    # Get message IDs from args or search
+    message_ids: list[str] = []
+    if getattr(args, "from_search", None):
+        # Execute search and use results
+        results = isolated_db.search_emails(
+            query=args.from_search,
+            limit=getattr(args, "limit", 100),
+        )
+        message_ids = [r["message_id"] for r in results]
+    else:
+        message_ids = list(getattr(args, "message_ids", []))
+
+    if not message_ids:
+        print(
+            json.dumps(
+                error_response(
+                    ErrorCodes.USER_MISSING_PARAMETER,
+                    "No message IDs provided. Use message_ids or --from-search",
+                )
+            )
+        )
+        return
+
+    # Get emails and extract imap_uids, skip non-existent
+    valid_emails: list[dict[str, Any]] = []
+    for mid in message_ids:
+        email = isolated_db.get_email(mid)
+        if email:
+            valid_emails.append(email)
+
+    if not valid_emails:
+        print(
+            json.dumps(
+                error_response(
+                    ErrorCodes.USER_EMAIL_NOT_FOUND,
+                    "No valid emails found for the provided message IDs",
+                )
+            )
+        )
+        return
+
+    # Update database using batch_update_flags
+    valid_ids = [e["message_id"] for e in valid_emails]
+    updated_count = isolated_db.batch_update_flags(
+        message_ids=valid_ids,
+        is_read=bool(args.read) if args.read is not None else None,
+        is_starred=bool(args.starred) if args.starred is not None else None,
+    )
+
+    # Update IMAP server for each email (sequential, as IMAP doesn't support batch)
+    # Group by folder for efficiency
+    emails_by_folder: dict[str, list[dict[str, Any]]] = {}
+    for email in valid_emails:
+        folder = email.get("folder", "INBOX")
+        if folder not in emails_by_folder:
+            emails_by_folder[folder] = []
+        emails_by_folder[folder].append(email)
+
+    # Apply IMAP updates by folder
+    for folder, emails in emails_by_folder.items():
+        # Group by account (though typically all same account)
+        emails_by_account: dict[str, list[dict[str, Any]]] = {}
+        for email in emails:
+            account = email.get("account", "")
+            if account not in emails_by_account:
+                emails_by_account[account] = []
+            emails_by_account[account].append(email)
+
+        for account, account_emails in emails_by_account.items():
+            folder_client = get_client(config, account)
+            uids = [str(e.get("imap_uid")) for e in account_emails if e.get("imap_uid")]
+            if not uids:
+                continue
+
+            try:
+                if args.read is not None:
+                    folder_client.mark_as_read(uids, folder, bool(args.read))
+                if args.starred is not None:
+                    folder_client.mark_as_starred(uids, folder, bool(args.starred))
+            except Exception as e:
+                print(json.dumps(error_response(ErrorCodes.SERVER_IMAP_CONNECTION_FAILED, str(e))))
+                return
+
+    print(
+        json.dumps(
+            success_response(
+                data={"updated_count": updated_count},
+                message=f"Updated {updated_count} emails",
+            )
+        )
+    )
+
+
+def cmd_tag(args: Any, config: dict[str, Any], db: MailDatabase) -> None:
+    """Manage email tags (labels)."""
+    client = get_client(config, getattr(args, "account", None))
+    paths = _get_account_paths(config, client.email)
+    isolated_db = MailDatabase(paths["db_path"])
+
+    tag_command = getattr(args, "tag_command", None)
+
+    if tag_command == "add":
+        message_id = args.message_id
+        tag = args.tag
+        email = isolated_db.get_email(message_id)
+        if not email:
+            print(
+                json.dumps(
+                    error_response(ErrorCodes.USER_EMAIL_NOT_FOUND, f"Email {message_id} not found")
+                )
+            )
+            return
+        isolated_db.add_tags(message_id, [tag])
+        updated_tags = isolated_db.get_tags(message_id)
+        print(
+            json.dumps(
+                success_response(
+                    data={"message_id": message_id, "tags": updated_tags},
+                    message=f"Added tag '{tag}'",
+                )
+            )
+        )
+
+    elif tag_command == "remove":
+        message_id = args.message_id
+        tag = args.tag
+        email = isolated_db.get_email(message_id)
+        if not email:
+            print(
+                json.dumps(
+                    error_response(ErrorCodes.USER_EMAIL_NOT_FOUND, f"Email {message_id} not found")
+                )
+            )
+            return
+        isolated_db.remove_tags(message_id, [tag])
+        updated_tags = isolated_db.get_tags(message_id)
+        print(
+            json.dumps(
+                success_response(
+                    data={"message_id": message_id, "tags": updated_tags},
+                    message=f"Removed tag '{tag}'",
+                )
+            )
+        )
+
+    elif tag_command == "list":
+        message_id = args.message_id
+        email = isolated_db.get_email(message_id)
+        if not email:
+            print(
+                json.dumps(
+                    error_response(ErrorCodes.USER_EMAIL_NOT_FOUND, f"Email {message_id} not found")
+                )
+            )
+            return
+        tags = isolated_db.get_tags(message_id)
+        print(
+            json.dumps(
+                success_response(
+                    data={"message_id": message_id, "tags": tags},
+                )
+            )
+        )
+
+    elif tag_command == "batch-add":
+        tag = args.tag
+        from_search = getattr(args, "from_search", None)
+        limit = getattr(args, "limit", 100)
+
+        if not from_search:
+            print(
+                json.dumps(
+                    error_response(
+                        ErrorCodes.USER_MISSING_PARAMETER,
+                        "--from-search is required for batch-add",
+                    )
+                )
+            )
+            return
+
+        # Execute search and use results
+        results = isolated_db.search_emails(query=from_search, limit=limit)
+        message_ids = [r["message_id"] for r in results]
+
+        if not message_ids:
+            print(
+                json.dumps(
+                    success_response(
+                        data={"updated_count": 0, "message_ids": []},
+                        message="No emails found matching search",
+                    )
+                )
+            )
+            return
+
+        updated_count = isolated_db.batch_add_tags(message_ids, [tag])
+        print(
+            json.dumps(
+                success_response(
+                    data={
+                        "updated_count": updated_count,
+                        "message_ids": message_ids,
+                        "tag": tag,
+                    },
+                    message=f"Added tag '{tag}' to {updated_count} emails",
+                )
+            )
+        )
+
+    else:
+        print(
+            json.dumps(
+                error_response(
+                    ErrorCodes.USER_INVALID_PARAMETER,
+                    f"Unknown tag command: {tag_command}",
+                )
+            )
+        )
+
+
+def cmd_classify(args: Any, config: dict[str, Any], db: MailDatabase) -> None:
+    """Classify emails automatically or get classification for one email."""
+    from mail_manager.classifier import EmailClassifier
+
+    client = get_client(config, getattr(args, "account", None))
+    paths = _get_account_paths(config, client.email)
+    isolated_db = MailDatabase(paths["db_path"])
+
+    message_id = getattr(args, "message_id", None)
+
+    if message_id:
+        # Classify single email
+        email = isolated_db.get_email(message_id)
+        if not email:
+            print(
+                json.dumps(
+                    error_response(ErrorCodes.USER_EMAIL_NOT_FOUND, f"Email {message_id} not found")
+                )
+            )
+            return
+
+        classifier = EmailClassifier()
+        classification = classifier.classify(email)
+
+        # Save to database
+        isolated_db.update_classification(
+            message_id=message_id,
+            importance=classification.importance,
+            category=classification.category,
+            confidence=classification.confidence,
+        )
+
+        print(
+            json.dumps(
+                success_response(
+                    data={
+                        "message_id": message_id,
+                        "importance": classification.importance,
+                        "category": classification.category,
+                        "confidence": classification.confidence,
+                        "matched_rules": classification.matched_rules,
+                    }
+                ),
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+    else:
+        # Classify all unclassified emails
+        emails = isolated_db.search_emails(limit=args.limit)
+        classifier = EmailClassifier()
+        count = 0
+        for email in emails:
+            # Check if needs classification (default values)
+            if email.get("importance") == "normal" and email.get("category") == "uncategorized":
+                classification = classifier.classify(email)
+                isolated_db.update_classification(
+                    message_id=email["message_id"],
+                    importance=classification.importance,
+                    category=classification.category,
+                    confidence=classification.confidence,
+                )
+                count += 1
+        print(json.dumps(success_response(data={"classified": count})))
+
+
+def cmd_reclassify(args: Any, config: dict[str, Any], db: MailDatabase) -> None:
+    """Manually reclassify an email."""
+    client = get_client(config, getattr(args, "account", None))
+    paths = _get_account_paths(config, client.email)
+    isolated_db = MailDatabase(paths["db_path"])
+
+    message_id = args.message_id
+    importance = getattr(args, "importance", None)
+    category = getattr(args, "category", None)
+
+    email = isolated_db.get_email(message_id)
+    if not email:
+        print(
+            json.dumps(
+                error_response(ErrorCodes.USER_EMAIL_NOT_FOUND, f"Email {message_id} not found")
+            )
+        )
+        return
+
+    # Update with manual override flag
+    isolated_db.update_classification(
+        message_id=message_id,
+        importance=importance,
+        category=category,
+        confidence=1.0,  # Manual classification has full confidence
+        manual_override=True,
+    )
+
+    print(
+        json.dumps(
+            success_response(
+                data={
+                    "message_id": message_id,
+                    "importance": importance,
+                    "category": category,
+                    "manual_override": True,
+                }
+            ),
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+
+
+def cmd_llm_reclassify(args: Any, config: dict[str, Any], db: MailDatabase) -> None:
+    """Re-classify emails using rule-based classifier or LLM.
+
+    In Agent mode (default): uses rule-based EmailClassifier.
+    In External mode (LLM_API_KEY configured): uses LLM for classification.
+    """
+    from mail_manager.classifier import classify_with_llm, EmailClassifier
+    from mail_manager.llm.client import LLMClient, is_external_llm_configured
+
+    client = get_client(config, getattr(args, "account", None))
+    paths = _get_account_paths(config, client.email)
+    isolated_db = MailDatabase(paths["db_path"])
+
+    use_llm = is_external_llm_configured()
+    llm_client = LLMClient() if use_llm else None
+    classifier = EmailClassifier()
+
+    if args.all:
+        emails = isolated_db.search_emails(limit=args.limit)
+    else:
+        emails = isolated_db.search_emails(importance="normal", limit=args.limit)
+
+    reclassified = 0
+    failed = 0
+    results = []
+
+    for email in emails:
+        current_importance = email.get("importance", "normal")
+        current_category = email.get("category", "uncategorized")
+
+        if not args.all and current_importance != "normal" and current_category != "uncategorized":
+            continue
+
+        try:
+            if use_llm:
+                classification = classify_with_llm(llm_client, email)
+            else:
+                classification = classifier.classify(email)
+
+            isolated_db.update_classification(
+                message_id=email["message_id"],
+                importance=classification.importance,
+                category=classification.category,
+                confidence=classification.confidence,
+            )
+
+            results.append({
+                "message_id": email["message_id"],
+                "subject": email.get("subject", "")[:50],
+                "old_importance": current_importance,
+                "new_importance": classification.importance,
+                "old_category": current_category,
+                "new_category": classification.category,
+                "confidence": classification.confidence,
+            })
+            reclassified += 1
+
+        except Exception as e:
+            failed += 1
+            logger.error(f"Failed to re-classify {email['message_id']}: {e}")
+
+    print(json.dumps(success_response(
+        data={"reclassified": reclassified, "failed": failed, "results": results}
+    ), ensure_ascii=False, indent=2))
+
+
+def cmd_rebuild_index(args: Any, config: dict[str, Any], db: MailDatabase) -> None:
+    """Rebuild ChromaDB index for vector search."""
+    client = get_client(config, getattr(args, "account", None))
+    paths = _get_account_paths(config, client.email)
+    isolated_db = MailDatabase(paths["db_path"])
+
+    print(f"Rebuilding search indices for {client.email}...")
+
+    with isolated_db._get_connection() as conn:
+        cursor = conn.cursor()
+
+        # 1. Rebuild FTS5
+        print("Rebuilding FTS5 index...")
+        try:
+            cursor.execute("INSERT INTO emails_fts(emails_fts) VALUES('rebuild')")
+            conn.commit()
+            print("✓ FTS5 rebuild complete.")
+        except Exception as e:
+            print(f"✗ FTS5 rebuild failed: {e}")
+
+        # 2. Rebuild ChromaDB
+        print("Rebuilding Vector index (this may take a while)...")
+        try:
+            collection = isolated_db._get_chroma_collection()
+            cursor.execute("SELECT * FROM emails")
+            rows = cursor.fetchall()
+
+            # Batch upsert
+            batch_size = 50
+            for i in range(0, len(rows), batch_size):
+                batch = rows[i : i + batch_size]
+                ids = []
+                documents = []
+                metadatas = []
+
+                for row in batch:
+                    email_dict = dict(row)
+                    doc_text = f"Subject: {email_dict.get('subject', '')}\nFrom: {email_dict.get('sender', '')}\nDate: {email_dict.get('date', '')}\n\n{email_dict.get('body_text', '')}"
+                    if len(doc_text) > 8000:
+                        doc_text = doc_text[:8000]
+
+                    ids.append(email_dict["message_id"])
+                    documents.append(doc_text)
+                    metadatas.append(
+                        {
+                            "subject": email_dict.get("subject", "") or "",
+                            "sender": email_dict.get("sender", "") or "",
+                            "date": str(email_dict.get("date", "")),
+                        }
+                    )
+
+                if ids:
+                    collection.upsert(ids=ids, documents=documents, metadatas=metadatas)
+                print(f"  Processed {min(i + batch_size, len(rows))}/{len(rows)} emails...")
+
+            print("✓ Vector index rebuild complete.")
+        except Exception as e:
+            print(f"✗ Vector index rebuild failed: {e}")
+
+
+def cmd_parse_attachments(args: Any, config: dict[str, Any], db: MailDatabase) -> None:
+    """Parse attachment content for enhanced search."""
+    from mail_manager.attachment_parser import parse_attachment
+    from mail_manager.llm.client import LLMClient, is_external_llm_configured
+
+    # Use account-isolated database
+    client = get_client(config, getattr(args, "account", None))
+    paths = _get_account_paths(config, client.email)
+    isolated_db = MailDatabase(paths["db_path"])
+
+    llm_client = LLMClient()
+
+    if args.message_id:
+        # Parse attachments for specific email
+        cursor = isolated_db._get_connection().cursor()
+        cursor.execute("SELECT * FROM attachments WHERE message_id = ?", (args.message_id,))
+        attachments = [dict(row) for row in cursor.fetchall()]
+        if not attachments:
+            print(f"No attachments found for email: {args.message_id}")
+            return
+    elif args.all:
+        # Parse all unprocessed attachments (content_text is NULL)
+        cursor = isolated_db._get_connection().cursor()
+        cursor.execute("SELECT * FROM attachments WHERE content_text IS NULL OR content_text = ''")
+        attachments = [dict(row) for row in cursor.fetchall()]
+        if not attachments:
+            print("No unprocessed attachments found.")
+            return
+    else:
+        print("Specify --message-id or --all")
+        return
+
+    parsed_count = 0
+    for att in attachments:
+        local_path = att.get("local_path")
+        if not local_path:
+            continue
+        path = Path(local_path)
+        if not path.exists():
+            continue
+
+        try:
+            result = parse_attachment(path, llm_client)
+            if result and result.text:
+                # Store content in database
+                isolated_db.save_attachment_content(local_path, result.text)
+                print(f"Parsed: {att.get('filename')} ({len(result.text)} chars)")
+                parsed_count += 1
+            else:
+                print(f"No content: {att.get('filename')}")
+        except Exception as e:
+            print(f"Failed to parse {att.get('filename')}: {e}")
+
+    print(f"\nParsed {parsed_count} attachments")
+
+
+def cmd_ai_reply(args: Any, config: dict[str, Any], db: MailDatabase) -> None:
+    """Compose and send AI-generated reply.
+
+    In Agent mode (default): outputs structured email data for Agent to compose reply.
+    In External mode (LLM_API_KEY configured): calls LLM API directly.
+    """
+    from mail_manager.reply_assistant import (
+        compose_ai_reply,
+        get_few_shot_examples,
+        store_reply_feedback,
+    )
+    from mail_manager.thread_manager import get_enhanced_thread_timeline
+    from mail_manager.llm.client import LLMClient, is_external_llm_configured
+
+    # Use account-isolated database
+    client = get_client(config, getattr(args, "account", None))
+    paths = _get_account_paths(config, client.email)
+    isolated_db = MailDatabase(paths["db_path"])
+
+    email = isolated_db.get_email(args.message_id)
+    if not email:
+        print(json.dumps(error_response(
+            ErrorCodes.USER_EMAIL_NOT_FOUND,
+            f"Email not found: {args.message_id}"
+        )))
+        return
+
+    # Get thread context if requested
+    thread = None
+    if getattr(args, "with_thread", False):
+        thread = get_enhanced_thread_timeline(isolated_db, args.message_id)
+
+    if not is_external_llm_configured():
+        # Agent mode: output structured data for the Agent to compose reply
+        if getattr(args, "intent", None):
+            print(f"**Intent:** {args.intent}\n")
+        print(_format_email_for_agent(args.message_id, email, thread))
+        return
+
+    # External LLM mode
+    llm_client = LLMClient()
+    examples = get_few_shot_examples(isolated_db)
+
+    print("Generating reply...")
+    reply = compose_ai_reply(
+        llm_client=llm_client,
+        original_email=email,
+        thread_context=thread,
+        user_intent=getattr(args, "intent", None),
+        few_shot_examples=examples,
+    )
+
+    if getattr(args, "dry_run", False):
+        print("\n--- Suggested Reply ---")
+        print(reply)
+        print("-----------------------")
+        return
+
+    print("\n--- Suggested Reply ---")
+    print(reply)
+    print("-----------------------")
+    try:
+        response = input("Send this reply? (y/n/e=edit): ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print("Reply cancelled.")
+        return
+
+    final_reply = None
+    if response == "y":
+        final_reply = reply
+    elif response == "e":
+        print("Enter edited reply (Ctrl+D to finish):")
+        lines = []
+        try:
+            while True:
+                lines.append(input())
+        except EOFError:
+            pass
+        edited = "\n".join(lines).strip()
+        if edited:
+            final_reply = edited
+
+    if final_reply:
+        client = get_client(config, getattr(args, "account", None))
+        try:
+            client.send_email(
+                to=email.get("sender", ""),
+                subject=f"Re: {email.get('subject', '')}",
+                body_text=final_reply,
+            )
+            print("Reply sent!")
+            store_reply_feedback(
+                db=isolated_db,
+                original_message_id=args.message_id,
+                original_email=str(email),
+                suggested_reply=reply,
+                user_edited_reply=final_reply if final_reply != reply else None,
+                is_positive=True,
+            )
+        except Exception as e:
+            print(f"Failed to send: {e}")
+    else:
+        store_reply_feedback(
+            db=isolated_db,
+            original_message_id=args.message_id,
+            original_email=str(email),
+            suggested_reply=reply,
+            is_positive=False,
+        )
+        print("Reply cancelled.")
+
+
+def _format_email_for_agent(
+    message_id: str, email: dict[str, Any], thread: list[dict[str, Any]] | None
+) -> str:
+    """Format email data as markdown for Agent consumption."""
+    lines = [
+        "# Email to Reply To",
+        "",
+        f"**Message-ID:** `{message_id}`",
+        f"**From:** {email.get('sender', 'Unknown')}",
+        f"**Subject:** {email.get('subject', 'No Subject')}",
+        f"**Date:** {email.get('date', 'Unknown')}",
+        "",
+        "## Body",
+        "",
+        (email.get('body_text', '') or '')[:3000],
+        "",
+    ]
+    if thread and len(thread) > 1:
+        lines.extend([
+            "## Thread Context",
+            "",
+            f"*{len(thread)} emails in thread:*",
+            "",
+        ])
+        for e in thread:
+            prefix = "→ " if e.get("message_id") == message_id else "  "
+            lines.append(
+                f"{prefix}{str(e.get('date', ''))[:16]} | "
+                f"{e.get('sender', '?')}: "
+                f"{e.get('subject', 'No Subject')}"
+            )
+        lines.append("")
+    lines.extend([
+        "---",
+        "*Reply using:* `reply <message_id> --body \"...\"` or `send --to ... --subject ... --body \"...\"`",
+    ])
+    return "\n".join(lines)
+
+
+def _match_sent_emails(
+    isolated_db: Any, emails: list[dict], date_from: Any, date_to: Any, limit: int
+) -> dict:
+    """Match sent emails to received for reply tracking."""
+    from mail_manager.summary_report import match_sent_emails_to_received, SENT_FOLDER_NAMES
+
+    sent_emails: list[dict[str, Any]] = []
+    for folder_name in SENT_FOLDER_NAMES:
+        sent = isolated_db.search_emails(
+            folder=folder_name,
+            date_from=date_from.isoformat() if hasattr(date_from, 'isoformat') else str(date_from),
+            date_to=date_to.isoformat() if hasattr(date_to, 'isoformat') else str(date_to),
+            limit=limit,
+        )
+        sent_emails.extend(sent)
+
+    seen_ids: set[str] = set()
+    unique_sent = []
+    for e in sent_emails:
+        msg_id = e.get("message_id", "")
+        if msg_id and msg_id not in seen_ids:
+            unique_sent.append(e)
+            seen_ids.add(msg_id)
+
+    if unique_sent:
+        return match_sent_emails_to_received(unique_sent, emails)
+    return {}
+
+
+def cmd_summary_report(args: Any, config: dict[str, Any], db: MailDatabase) -> None:
+    """Generate email summary report by sender.
+
+    In Agent mode (default): outputs grouped-by-sender markdown for Agent to summarize.
+    In External mode (LLM_API_KEY configured): uses LLM to auto-generate summaries.
+
+    Args:
+        args: CLI arguments with account, date_from, date_to, days, limit, output.
+        config: Configuration dictionary.
+        db: MailDatabase instance (not used, we create isolated one per account).
+    """
+    from datetime import date, datetime, timedelta
+    from mail_manager.llm.client import is_external_llm_configured
+    from mail_manager.summary_report import (
+        group_emails_by_sender,
+        format_summary_report,
+        SENT_FOLDER_NAMES,
+        match_sent_emails_to_received,
+    )
+
+    # Get account-specific paths
+    client = get_client(config, getattr(args, "account", None))
+    paths = _get_account_paths(config, client.email)
+    isolated_db = MailDatabase(paths["db_path"])
+
+    # Parse date arguments
+    date_from: date | None = None
+    date_to: date | None = None
+
+    if getattr(args, "date_from", None):
+        try:
+            date_from = datetime.strptime(args.date_from, "%Y-%m-%d").date()
+        except ValueError:
+            print(json.dumps(error_response(
+                ErrorCodes.USER_INVALID_PARAMETER,
+                f"Invalid date_from format: {args.date_from}. Use YYYY-MM-DD.",
+            )))
+            return
+
+    if getattr(args, "date_to", None):
+        try:
+            date_to = datetime.strptime(args.date_to, "%Y-%m-%d").date()
+        except ValueError:
+            print(json.dumps(error_response(
+                ErrorCodes.USER_INVALID_PARAMETER,
+                f"Invalid date_to format: {args.date_to}. Use YYYY-MM-DD.",
+            )))
+            return
+
+    if date_to is None:
+        date_to = date.today()
+    if date_from is None:
+        date_from = date_to - timedelta(days=getattr(args, "days", 7))
+
+    try:
+        emails = isolated_db.search_emails(
+            date_from=date_from.isoformat(),
+            date_to=date_to.isoformat(),
+            limit=getattr(args, "limit", 100),
+        )
+
+        if not emails:
+            print(f"No emails found for {client.email} between {date_from} and {date_to}.")
+            return
+
+        if is_external_llm_configured():
+            # External LLM mode
+            from mail_manager.llm.client import LLMClient
+            llm_client = LLMClient()
+            report = generate_email_summary_report(
+                db=isolated_db,
+                llm_client=llm_client,
+                recipient=client.email or "unknown@example.com",
+                date_from=date_from,
+                date_to=date_to,
+                days_back=getattr(args, "days", 7),
+                limit=getattr(args, "limit", 100),
+                output_path=getattr(args, "output", None),
+            )
+        else:
+            # Agent mode: output structured data
+            sender_groups = group_emails_by_sender(emails)
+            reply_info = _match_sent_emails(isolated_db, emails, date_from, date_to,
+                                            getattr(args, "limit", 100))
+            report = format_summary_report(
+                recipient=client.email or "unknown@example.com",
+                date_from=date_from,
+                date_to=date_to,
+                sender_emails=sender_groups,
+                reply_info=reply_info if reply_info else None,
+            )
+
+        if getattr(args, "output", None):
+            os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
+            with open(args.output, "w", encoding="utf-8") as f:
+                f.write(report)
+            print(json.dumps(success_response(
+                data={"output_path": args.output},
+                message=f"Report saved to {args.output}",
+            )))
+        else:
+            print(report)
+
+    except Exception as e:
+        logger.error(f"Failed to generate summary report: {e}")
+        print(json.dumps(error_response(ErrorCodes.SERVER_DATABASE_ERROR, str(e))))
+
+
+def cmd_auto_configure(args: Any, config: dict[str, Any], db: MailDatabase) -> None:
+    """Auto-detect email provider and generate config."""
+    from mail_manager.email_providers import auto_configure, generate_config_text
+    email = args.email.strip()
+    provider, _ = auto_configure(email, args.password.strip())
+    if provider:
+        print(f"# Detected: {provider.name}")
+        print(f"# IMAP: {provider.imap_server}:{provider.imap_port}")
+        print(f"# SMTP: {provider.smtp_server}:{provider.smtp_port}")
+        if provider.note:
+            print(f"# ℹ️  {provider.note}")
+    else:
+        print(f"# ⚠️  Unknown provider for {email}")
+    print()
+    print(generate_config_text(email, args.password.strip(), getattr(args, "account_num", 1)))
+    print("# Copy the above into your config.txt file")
+
+
+def cmd_list_providers(args: Any, config: dict[str, Any], db: MailDatabase) -> None:
+    """List all known email providers."""
+    from mail_manager.email_providers import list_all_providers
+    providers = list_all_providers()
+    print(json.dumps(success_response(
+        data={"count": len(providers), "providers": providers}
+    ), ensure_ascii=False, indent=2))
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Mail Manager CLI")
+    subparsers = parser.add_subparsers(dest="command", help="Command to execute")
+
+    # fetch
+    fetch_p = subparsers.add_parser("fetch", help="Fetch emails from server asynchronously")
+    fetch_p.add_argument("--account", help="Email account to use")
+    fetch_p.add_argument(
+        "--folder",
+        default="ALL",
+        help="Folder to fetch from. Default 'ALL' fetches all folders including Sent. Use comma-separated names like 'INBOX,Sent' for specific folders.",
+    )
+    fetch_p.add_argument("--limit", type=int, default=50, help="Max emails to fetch per folder")
+    fetch_p.add_argument("--days", type=int, default=7, help="Fetch emails from last N days")
+    fetch_p.add_argument("--unread", action="store_true", help="Fetch only unread emails")
+    fetch_p.add_argument(
+        "--confirm", action="store_true", help="Confirm fetching more than 100 emails"
+    )
+
+    # fetch-status
+    fetch_status_p = subparsers.add_parser(
+        "fetch-status", help="Check status of an async fetch task"
+    )
+    fetch_status_p.add_argument("task_id", help="Task ID returned by the fetch command")
+
+    # search
+    search_p = subparsers.add_parser("search", help="Search local emails")
+    search_p.add_argument("--query", help="Text to search in subject/body/sender")
+    search_p.add_argument(
+        "--vector",
+        action="store_true",
+        help="Use vector semantic search instead of full-text search",
+    )
+    search_p.add_argument(
+        "--hybrid", action="store_true", help="Use hybrid search (FTS + Vector) with reranking"
+    )
+    search_p.add_argument("--account", help="Filter by account")
+    search_p.add_argument("--folder", help="Filter by folder")
+    search_p.add_argument("--sender", help="Filter by sender")
+    search_p.add_argument("--subject", help="Filter by subject")
+    search_p.add_argument("--is-read", type=int, choices=[0, 1], help="1 for read, 0 for unread")
+    search_p.add_argument("--has-attachment", type=int, choices=[0, 1], help="1 for has attachment")
+    search_p.add_argument(
+        "--importance",
+        choices=["critical", "high", "normal", "low"],
+        help="Filter by importance level",
+    )
+    search_p.add_argument(
+        "--category",
+        choices=["work", "personal", "notification", "promo", "uncategorized"],
+        help="Filter by category",
+    )
+    search_p.add_argument("--tag", help="Filter by tag (label)")
+    search_p.add_argument("--limit", type=int, default=20, help="Max results")
+
+    # smart-search
+    smart_search_p = subparsers.add_parser(
+        "smart-search", help="Search emails using natural language"
+    )
+    smart_search_p.add_argument("query", help="Natural language search query")
+    smart_search_p.add_argument("--account", help="Account to search")
+    smart_search_p.add_argument("--limit", type=int, default=20, help="Max results")
+
+    # read
+    read_p = subparsers.add_parser("read", help="Read a specific email by message_id")
+    read_p.add_argument("message_id", help="Message ID to read")
+    read_p.add_argument("--account", help="Account to read from")
+    read_p.add_argument(
+        "--brief", action="store_true", help="Show brief table view instead of detailed Markdown"
+    )
+    read_p.add_argument(
+        "--attachment-summary",
+        "-a",
+        action="store_true",
+        help="Show attachment content summaries (requires prior parse-attachments)",
+    )
+
+    # templates
+    templates_p = subparsers.add_parser("templates", help="Manage email templates")
+    template_subparsers = templates_p.add_subparsers(dest="template_command", required=True)
+    template_list = template_subparsers.add_parser("list", help="List available templates")
+    template_list.add_argument("--account", help="Account to use")
+    template_show = template_subparsers.add_parser("show", help="Show template content")
+    template_show.add_argument("name", help="Template name")
+    template_show.add_argument("--account", help="Account to use")
+    template_create = template_subparsers.add_parser("create", help="Create a new template")
+    template_create.add_argument("name", help="Template name")
+    template_create.add_argument("--content", required=True, help="Template content")
+    template_create.add_argument("--required-vars", help="Comma-separated required variables")
+    template_create.add_argument("--account", help="Account to use")
+
+    # send
+    send_p = subparsers.add_parser("send", help="Send an email")
+    send_p.add_argument("--account", help="Account to send from")
+    send_p.add_argument("--to", required=True, nargs="+", help="Recipient email(s)")
+    send_p.add_argument("--subject", required=True, help="Email subject")
+    send_p.add_argument("--body", required=True, help="Email body text")
+    send_p.add_argument("--html-body", help="Email body in HTML format")
+    send_p.add_argument("--cc", nargs="+", help="CC email address(es)")
+    send_p.add_argument("--bcc", nargs="+", help="BCC email address(es)")
+    send_p.add_argument("--attach", nargs="+", help="Paths to attachments (files or folders)")
+    send_p.add_argument(
+        "--zip-as", help="Pack all attachments into a single zip file with this name"
+    )
+
+    # reply
+    reply_p = subparsers.add_parser("reply", help="Reply to an email")
+    reply_p.add_argument("message_id", help="Message ID to reply to")
+    reply_p.add_argument("--account", help="Account to send from")
+    reply_p.add_argument("--body", required=True, help="Email body text")
+    reply_p.add_argument("--html-body", help="Email body in HTML format")
+    reply_p.add_argument("--all", action="store_true", help="Reply to all (senders and CCs)")
+    reply_p.add_argument("--attach", nargs="+", help="Paths to attachments (files or folders)")
+    reply_p.add_argument(
+        "--zip-as", help="Pack all attachments into a single zip file with this name"
+    )
+
+    # mark
+    mark_p = subparsers.add_parser("mark", help="Mark email as read/starred and manage tags")
+    mark_p.add_argument("message_id", help="Message ID to mark")
+    mark_p.add_argument("--read", type=int, choices=[0, 1], help="1 to mark read, 0 for unread")
+    mark_p.add_argument("--starred", type=int, choices=[0, 1], help="1 to star, 0 to unstar")
+    mark_p.add_argument("--add-tag", help="Add a tag to the email")
+    mark_p.add_argument("--remove-tag", help="Remove a tag from the email")
+
+    # move
+    move_p = subparsers.add_parser("move", help="Move email to folder")
+    move_p.add_argument("message_id", help="Message ID to move")
+    move_p.add_argument("target_folder", help="Target folder name")
+
+    # delete
+    del_p = subparsers.add_parser("delete", help="Delete email")
+    del_p.add_argument("message_id", help="Message ID to delete")
+
+    # export
+    exp_p = subparsers.add_parser("export", help="Export emails")
+    exp_p.add_argument("--format", choices=["json", "csv"], default="json", help="Export format")
+    exp_p.add_argument("--output", required=True, help="Output file path")
+
+    # attachments
+    att_p = subparsers.add_parser("attachments", help="List attachments with preview links")
+    att_p.add_argument("--account", help="Account to list attachments from")
+    att_p.add_argument("--limit", type=int, default=100, help="Max results")
+
+    # summarize
+    sum_p = subparsers.add_parser(
+        "summarize", help="Generate a professional markdown summary of emails"
+    )
+    sum_p.add_argument("--task-id", help="Summarize emails from a specific fetch task ID")
+    sum_p.add_argument(
+        "--limit",
+        type=int,
+        default=10,
+        help="Number of recent emails to summarize if no task-id is provided",
+    )
+
+    # thread
+    thread_p = subparsers.add_parser("thread", help="Show email thread timeline as a table")
+    thread_p.add_argument("message_id", help="Seed message_id to build the thread")
+    thread_p.add_argument("--account", help="Account to read from")
+    thread_p.add_argument("--summary", action="store_true", help="Generate LLM summary of thread")
+
+    # rebuild-index
+    rebuild_p = subparsers.add_parser(
+        "rebuild-index", help="Rebuild FTS5 and Vector search indices for existing emails"
+    )
+    rebuild_p.add_argument("--account", help="Account to rebuild indices for")
+
+    # classify
+    classify_p = subparsers.add_parser(
+        "classify", help="Classify emails by importance and category"
+    )
+    classify_p.add_argument(
+        "message_id", nargs="?", help="Message ID to classify (optional, defaults to all)"
+    )
+    classify_p.add_argument("--account", help="Account to classify emails from")
+    classify_p.add_argument(
+        "--limit", type=int, default=100, help="Max emails to classify when batch mode"
+    )
+
+    # reclassify
+    reclassify_p = subparsers.add_parser("reclassify", help="Manually reclassify an email")
+    reclassify_p.add_argument("message_id", help="Message ID to reclassify")
+    reclassify_p.add_argument(
+        "--importance", choices=["critical", "high", "normal", "low"], help="New importance level"
+    )
+    reclassify_p.add_argument(
+        "--category",
+        choices=["work", "personal", "notification", "promo", "uncategorized"],
+        help="New category",
+    )
+    reclassify_p.add_argument("--account", help="Account the email belongs to")
+
+    # llm-reclassify
+    llm_reclassify_p = subparsers.add_parser(
+        "llm-reclassify", help="Re-classify emails using LLM (for normal/uncategorized emails)"
+    )
+    llm_reclassify_p.add_argument(
+        "--importance",
+        action="store_true",
+        help="Only re-classify importance level",
+    )
+    llm_reclassify_p.add_argument(
+        "--category",
+        action="store_true",
+        help="Only re-classify category",
+    )
+    llm_reclassify_p.add_argument(
+        "--limit",
+        type=int,
+        default=50,
+        help="Max emails to re-classify (default: 50)",
+    )
+    llm_reclassify_p.add_argument(
+        "--all",
+        action="store_true",
+        help="Re-classify all emails, not just normal/uncategorized",
+    )
+    llm_reclassify_p.add_argument("--account", help="Account to re-classify emails from")
+
+    # batch-mark
+    batch_mark_p = subparsers.add_parser("batch-mark", help="Batch mark emails as read/starred")
+    batch_mark_p.add_argument("message_ids", nargs="*", help="Message IDs to mark")
+    batch_mark_p.add_argument(
+        "--read", type=int, choices=[0, 1], help="1 to mark read, 0 for unread"
+    )
+    batch_mark_p.add_argument("--starred", type=int, choices=[0, 1], help="1 to star, 0 to unstar")
+    batch_mark_p.add_argument("--from-search", help="Use search results as message IDs")
+    batch_mark_p.add_argument("--account", help="Account")
+    batch_mark_p.add_argument(
+        "--limit", type=int, default=100, help="Max results when using --from-search"
+    )
+
+    # tag
+    tag_p = subparsers.add_parser("tag", help="Manage email tags")
+    tag_subparsers = tag_p.add_subparsers(dest="tag_command", help="Tag subcommand")
+
+    # tag add <message_id> <tag>
+    tag_add = tag_subparsers.add_parser("add", help="Add tag to email")
+    tag_add.add_argument("message_id", help="Message ID")
+    tag_add.add_argument("tag", help="Tag to add")
+
+    # tag remove <message_id> <tag>
+    tag_remove = tag_subparsers.add_parser("remove", help="Remove tag from email")
+    tag_remove.add_argument("message_id", help="Message ID")
+    tag_remove.add_argument("tag", help="Tag to remove")
+
+    # tag list <message_id>
+    tag_list = tag_subparsers.add_parser("list", help="List tags on email")
+    tag_list.add_argument("message_id", help="Message ID")
+
+    # tag batch-add <tag> --from-search <query>
+    tag_batch = tag_subparsers.add_parser("batch-add", help="Add tag to multiple emails")
+    tag_batch.add_argument("tag", help="Tag to add")
+    tag_batch.add_argument("--from-search", required=True, help="Search query to find emails")
+    tag_batch.add_argument("--limit", type=int, default=100, help="Max emails to tag")
+    tag_batch.add_argument("--account", help="Account")
+
+    # parse-attachments
+    parse_att_p = subparsers.add_parser(
+        "parse-attachments", help="Parse attachment content for enhanced search"
+    )
+    parse_att_p.add_argument("--message-id", help="Parse attachments for specific email")
+    parse_att_p.add_argument("--all", action="store_true", help="Parse all unprocessed attachments")
+
+    # ai-reply
+    ai_reply_p = subparsers.add_parser("ai-reply", help="AI-generated reply")
+    ai_reply_p.add_argument("message_id", help="Email to reply to")
+    ai_reply_p.add_argument("--intent", help="Specific intent for reply")
+    ai_reply_p.add_argument("--with-thread", action="store_true", help="Include thread context")
+    ai_reply_p.add_argument(
+        "--dry-run", action="store_true", help="Show suggestion without sending"
+    )
+    ai_reply_p.add_argument("--account", help="Account to send from")
+
+    # auto-configure
+    auto_config_p = subparsers.add_parser("auto-configure", help="Auto-detect email provider and generate config")
+    auto_config_p.add_argument("email", help="Email address")
+    auto_config_p.add_argument("password", help="Authorization code / app password")
+    auto_config_p.add_argument("--account-num", type=int, default=1, help="Account number (default: 1)")
+    auto_config_p.add_argument("--protocol", choices=["imap", "pop3"], default="imap")
+
+    # list-providers
+    subparsers.add_parser("list-providers", help="List all known email providers")
+
+    # summary-report
+    summary_p = subparsers.add_parser(
+        "summary-report", help="Generate email summary report by sender"
+    )
+    summary_p.add_argument("--account", help="Account to use")
+    summary_p.add_argument("--date-from", help="Start date (YYYY-MM-DD)")
+    summary_p.add_argument("--date-to", help="End date (YYYY-MM-DD)")
+    summary_p.add_argument("--days", type=int, default=7, help="Days to look back")
+    summary_p.add_argument("--limit", type=int, default=100, help="Max emails to process")
+    summary_p.add_argument("--output", help="Output file path")
+
+    args = parser.parse_args()
+
+    if not args.command:
+        parser.print_help()
+        return
+
+    try:
+        config = load_config()
+        db = MailDatabase(config["DB_PATH"])
+    except Exception as e:
+        print(json.dumps(error_response(ErrorCodes.INTERNAL_ERROR, f"Failed to initialize: {e}")))
+        return
+
+    if not config.get("ACCOUNTS"):
+        print(json.dumps(error_response(ErrorCodes.BIZ_ACCOUNT_NOT_CONFIGURED,
+              "No mail accounts configured. Please copy example.config.txt to config.txt and fill in your email details.")))
+        return
+
+    if args.command == "fetch":
+        cmd_fetch(args, config, db)
+    elif args.command == "fetch-status":
+        cmd_fetch_status(args, config, db)
+    elif args.command == "search":
+        cmd_search(args, config, db)
+    elif args.command == "smart-search":
+        cmd_smart_search(args, config, db)
+    elif args.command == "read":
+        cmd_read(args, config, db)
+    elif args.command == "send":
+        cmd_send(args, config, db)
+    elif args.command == "reply":
+        cmd_reply(args, config, db)
+    elif args.command == "mark":
+        cmd_mark(args, config, db)
+    elif args.command == "move":
+        cmd_move(args, config, db)
+    elif args.command == "delete":
+        cmd_delete(args, config, db)
+    elif args.command == "export":
+        cmd_export(args, config, db)
+    elif args.command == "attachments":
+        cmd_attachments(args, config, db)
+    elif args.command == "summarize":
+        cmd_summarize(args, config, db)
+    elif args.command == "thread":
+        cmd_thread(args, config, db)
+    elif args.command == "rebuild-index":
+        cmd_rebuild_index(args, config, db)
+    elif args.command == "classify":
+        cmd_classify(args, config, db)
+    elif args.command == "reclassify":
+        cmd_reclassify(args, config, db)
+    elif args.command == "llm-reclassify":
+        cmd_llm_reclassify(args, config, db)
+    elif args.command == "batch-mark":
+        cmd_batch_mark(args, config, db)
+    elif args.command == "tag":
+        cmd_tag(args, config, db)
+    elif args.command == "templates":
+        cmd_templates(args, config, db)
+    elif args.command == "parse-attachments":
+        cmd_parse_attachments(args, config, db)
+    elif args.command == "ai-reply":
+        cmd_ai_reply(args, config, db)
+    elif args.command == "auto-configure":
+        cmd_auto_configure(args, config, db)
+    elif args.command == "list-providers":
+        cmd_list_providers(args, config, db)
+    elif args.command == "summary-report":
+        cmd_summary_report(args, config, db)
+
+
+if __name__ == "__main__":
+    main()
