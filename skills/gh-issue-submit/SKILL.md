@@ -64,6 +64,54 @@ xsrc` 有 DeepSeek-Reasonix 源码），避免重复 clone。
 - **语言**：默认直接中文正文；国际项目可英文正文 + 中文评论双版（先问用户）。
 - 写完后存到工作区临时文件（如 `issue-<简述>.md`），避免 shell 转义问题。
 
+### 3.5 正文插图：专用分支 + raw URL（2026-09-16 实战验证）
+
+issue / discussion 正文要配图时，**不要试图走 GitHub 的网页上传接口** —— 那条路（`github.com/upload/policies/assets`）依赖浏览器 session cookie，`gh` 的 token 拿不到，无法脚本化。
+
+**可行且可脚本化的做法：把图 commit 到仓库的一个独立分支，用 raw URL 外链。**
+
+```bash
+# 0) 前置检查：仓库必须 PUBLIC —— private 仓库的 raw URL 会 404
+gh repo view <owner>/<repo> --json visibility
+
+# 1) 基于远端建独立分支（不污染默认分支）
+cd <repo>
+git checkout -b <assets-branch> origin/<default-branch>
+mkdir -p <dir>                      # 如 discussion-assets/ 或 docs/images/
+cp <本地图片> <dir>/01-xxx.png       # 给图起可读的名字，便于正文引用
+
+# 2) 显式路径提交（禁 git add -A / .）
+git add <dir>/01-xxx.png <dir>/02-xxx.png
+git status --short                  # 核对暂存区只含这些图
+git commit -m "docs(assets): screenshots for <用途>"
+git push origin <assets-branch>
+git checkout <default-branch>       # 切回，别把默认分支留在 assets 分支上
+```
+
+正文里这样引用：
+
+```markdown
+![说明文字](https://raw.githubusercontent.com/<owner>/<repo>/<assets-branch>/<dir>/01-xxx.png)
+```
+
+**提交前必须验证 URL 可访问**（否则帖子里是破图）：
+
+```bash
+A="https://raw.githubusercontent.com/<owner>/<repo>/<assets-branch>/<dir>"
+for f in 01-xxx.png 02-xxx.png; do
+  code=$(curl -s -o /dev/null -w "%{http_code}" "$A/$f")
+  echo "$code  $f"          # 期望都是 200
+done
+```
+
+**要点与陷阱**：
+
+- **图片分支不要删** —— 帖子的图直接指向它，**删分支 = 图全部 404**；要清理先迁图并更新帖子链接。
+- **给图起语义化文件名**（`01-recovery-copies.png`），比 `clipboard-20260916-134424.566995-000003.png` 便于后续维护。
+- **正文与图片分两步走更稳**：先把正文写成独立文件（`--body-file` / `-F body=@file`），再单独处理图片，避免长正文 + 图片混在一条命令里出转义问题。
+- **不愿建分支时的替代方案**：在 issue/discussion 编辑器里**手动粘贴/拖入**图片 —— GitHub 会转成 `https://github.com/user-attachments/assets/<uuid>` 托管，代价是**必须人工操作，无法脚本化**。
+- **隐私自检**：截图常带真实路径、会话名、项目名 —— 发帖前逐张过一遍，必要时打码或换图。
+
 ### 4. 权限检查与账号切换（⚠️ 最容易踩坑）
 
 **凭据来源（先搞清楚手上有哪两种凭据）**：
@@ -115,6 +163,25 @@ gh auth status
 - 注意：环境变量名有 `GITHUB_TOKEN` 和 `GH_TOKEN` 两个，都要清。`unset` 只在当前 shell 命令内生效，每条命令都要带上（如 `unset GITHUB_TOKEN GH_TOKEN; gh issue create ...`），或者用 `env -u GITHUB_TOKEN -u GH_TOKEN gh ...`。
 
 ### 5. 提交
+
+除 issue 外，**Discussion 也能用 `gh` 提交**（GraphQL mutation，2026-09-16 实测；`gh issue create` 不支持 discussion）：
+
+```bash
+# 先取 repo id 与目标分类 id（分类名如 "Show and tell" / "General"）
+env -u GITHUB_TOKEN gh api graphql -f query='
+{ repository(owner:"<owner>", name:"<repo>") {
+    id
+    discussionCategories(first:12) { nodes { id name } } } }'
+
+# 长正文写成独立文件，用 -F body=@file 传入（避开 shell 转义）
+env -u GITHUB_TOKEN gh api graphql   -f query='mutation($repo:ID!,$cat:ID!,$title:String!,$body:String!){
+    createDiscussion(input:{repositoryId:$repo,categoryId:$cat,title:$title,body:$body}){
+      discussion{ url number } } }'   -f repo='<R_...>' -f cat='<DIC_...>'   -f title='<标题>' -F body=@<正文文件路径>
+```
+
+- **分类选择**：`Q&A` 提问 / `Ideas` 功能建议 / **`Show and tell` 展示自己的作品（分享 fork、工具、脚本等用这个）** / `General` 其它。
+- 正文里的图片同样走 **3.5 的专用分支 + raw URL** 方案。
+- 同样适用「**6.5 提交后更正：直接改正文**」—— `updateDiscussion` mutation 改正文，不要追加更正评论。
 
 ```bash
 unset GITHUB_TOKEN GH_TOKEN
