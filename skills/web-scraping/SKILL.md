@@ -29,7 +29,7 @@ description: 从任意网页抓取完整内容并整理为 Markdown：探测 SSR
   1. 先访问 `https://www.bilibili.com/` 用 `curl -c cookies.txt` 拿匿名 cookie，请求带 `-b cookies.txt` + `Referer`。
   2. 间隔 2–4 秒 + 指数退避重试（等待 10s、18s、26s…）。
   3. 仍不行 → 复用浏览器登录态（第 4 步），登录后基本无限流。
-- 需要 wbi 签名时参考 `MediaCrawler 的 `media_platform/bilibili/help.py`` 的 `BilibiliSign`（md5(query+salt)，salt 由 img_key/sub_key 按固定 64 位置换表生成；img_key/sub_key 从 `https://api.bilibili.com/x/web-interface/nav` 的 `wbi_img` 或页面 localStorage 的 `wbi_img_urls` 取）。
+- 需要 wbi 签名时参考 MediaCrawler 仓库的 `media_platform/bilibili/help.py` 里的 `BilibiliSign`（md5(query+salt)，salt 由 img_key/sub_key 按固定 64 位置换表生成；img_key/sub_key 从 `https://api.bilibili.com/x/web-interface/nav` 的 `wbi_img` 或页面 localStorage 的 `wbi_img_urls` 取）。
 
 ## 4. CDP 复用 Chrome 登录态（推荐）
 
