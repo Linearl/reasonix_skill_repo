@@ -1,6 +1,6 @@
 ---
 name: gh-issue-submit
-description: 用 gh CLI 提交高质量 GitHub issue：模板发现、查重（含已关闭 issue 阅读）、源码调研根因、权限切换陷阱、computer use 回退、提交与验证
+description: 用 gh CLI 提交高质量 GitHub issue 与 Discussion：模板发现、查重（含已关闭 issue 阅读）、源码调研根因、权限切换陷阱、computer use 回退、提交与验证、正文插图、社区投票（Discussions Poll 能力边界与选型）
 ---
 
 # GitHub Issue 提交技能（gh-issue-submit）
@@ -12,6 +12,7 @@ description: 用 gh CLI 提交高质量 GitHub issue：模板发现、查重（�
 - 用户要求"给某仓库提个 issue / feature request / bug report"
 - 用户给了 issues/new 链接（含 `?template=...` 参数）或直接点名仓库
 - 用户要求"帮我写并提交 issue"
+- 用户想在社区**征集意见 / 做功能优先级投票** → 见 **5.5**（先看它列的三个边界：≤8 选项、只能单选、**不能用 API 创建**）
 
 ## 核心步骤
 
@@ -179,9 +180,69 @@ env -u GITHUB_TOKEN gh api graphql   -f query='mutation($repo:ID!,$cat:ID!,$titl
       discussion{ url number } } }'   -f repo='<R_...>' -f cat='<DIC_...>'   -f title='<标题>' -F body=@<正文文件路径>
 ```
 
-- **分类选择**：`Q&A` 提问 / `Ideas` 功能建议 / **`Show and tell` 展示自己的作品（分享 fork、工具、脚本等用这个）** / `General` 其它。
+- **分类选择**：`Q&A` 提问 / `Ideas` 功能建议 / **`Show and tell` 展示自己的作品（分享 fork、工具、脚本等用这个）** / `Polls` 投票（⚠️ **不能用 API 创建，只能网页建**，见 **5.5**） / `General` 其它。
 - 正文里的图片同样走 **3.5 的专用分支 + raw URL** 方案。
 - 同样适用「**6.5 提交后更正：直接改正文**」—— `updateDiscussion` mutation 改正文，不要追加更正评论。
+
+### 5.5 社区投票：Discussions Poll 的能力边界（2026-09-17 调研）
+
+想"从 N 个候选里选出用户最需要的 M 个"时，**先看这张边界表** —— 它直接决定方案怎么选：
+
+| 项 | 事实 | 依据 |
+|---|---|---|
+| **选项上限** | **最多 8 个** | GitHub Blog 2022-04-12 原文 *"You can add up to eight polling options"*；2026-08 社区仍在抱怨未放开 |
+| **选择方式** | **只能单选，不支持多选** | 官方文档的 poll 创建步骤里**没有**多选勾选项；社区 feature request *"Polls: support multiple choices"* #52039 至今未实现 |
+| **谁能投** | **仅登录用户** | 官方 blog |
+| **分类要求** | 必须发在 **format=Poll** 的 category（默认名 `Polls`） | 官方文档「In the list of categories, click **Polls**」 |
+| **截止时间** | **未验证** —— 不要向用户断言可设截止 | 官方文档未载，未实测 |
+
+**⚠️ API 覆盖度（GraphQL introspection 实测，2026-09-17）—— 只有「查」和「投」，没有「建」：**
+
+| 操作 | 能否 API 化 | 证据 |
+|---|---|---|
+| **创建 Poll** | ❌ **不能，只能网页手工建** | `CreateDiscussionInput` 只有 5 个字段：`clientMutationId / repositoryId / title / body / categoryId`，**无任何 poll 字段** |
+| **查询票数** | ✅ 能 | `Discussion.poll : DiscussionPoll` 存在 |
+| **投票** | ✅ 能（`addDiscussionPollVote`） | 全部 259 个 mutation 中唯一含 poll 者 |
+
+**前置：仓库必须先启用 Discussions** —— 未启用时 `discussionCategories` 返回**空数组**（不报错，容易误判成"没有分类"）：
+
+```bash
+env -u GITHUB_TOKEN gh api -X PATCH repos/<owner>/<repo> -f has_discussions=true
+# 验证（返回 false ⇒ 立刻能看出没开）
+env -u GITHUB_TOKEN gh api repos/<owner>/<repo> --jq '.has_discussions'
+```
+
+**读票数（脚本统计用；字段名已实测）：**
+
+```bash
+env -u GITHUB_TOKEN gh api graphql -f query='
+{ repository(owner:"<owner>", name:"<repo>") {
+    discussion(number:<编号>) {
+      title
+      poll {
+        question
+        totalVoteCount
+        viewerHasVoted
+        options(first:10) { totalCount nodes { option totalVoteCount } }
+      } } } }'
+```
+
+- `DiscussionPoll` 字段：`discussion / id / options / question / totalVoteCount / viewerCanVote / viewerHasVoted`
+- `DiscussionPollOption` 字段：`id / option（选项文本）/ poll / totalVoteCount / viewerHasVoted`
+- `options` 是标准 connection（`edges / nodes / pageInfo / totalCount`）。
+- **没有 poll 时 `poll` 返回 `null`**，不报错。
+
+**方案选型：N 个候选怎么投**
+
+| 候选数 | 要不要「每人限票」 | 方案 |
+|---|---|---|
+| **≤8** | 不限（看热度排序取 top M） | **1 个 Poll**，单选即得票排序 —— **最省事** |
+| **≤8** | 要「每人 M 票」 | **M 轮加权 Poll**：*第 1 优先 / 第 2 优先 / …* 各发一个，**每个都单选** ⇒ 每人天然只投 M 次；计分按 **M : M-1 : … : 1** 加权 |
+| **>8** | — | **Poll 装不下** ⇒ 改用 **👍 reaction 计数**：一条 discussion（或 issue）正文列出候选，**每个候选一条 comment**，各自计 👍。**⚠️ 不能写成「一个候选一种 emoji」** —— GitHub 只有 8 种 reaction，同样撞 8 的墙 |
+
+**受众策略（容易忽略）**：投票只有发在**自己拥有/维护的仓库**才合适；发到第三方仓库属于越界。若想让上游用户参与，正确做法是**在自己仓库开投票 + 在上游发 announcement 引流**，而不是把投票发到上游。
+
+**⚠️ 创建 Poll 是纯手工操作**：登录网页 → 该仓库 Discussions → 选 `Polls` 分类 → **New discussion** → 填 Poll question + 选项（≥2）→ 点 **Add an option** 加到所需数量（≤8）→ **Start poll**。因为 API 无法创建，这一步**必须请用户亲自操作**，不要承诺「我帮你建成」。
 
 ```bash
 unset GITHUB_TOKEN GH_TOKEN
