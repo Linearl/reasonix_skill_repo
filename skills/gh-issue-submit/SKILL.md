@@ -242,7 +242,26 @@ env -u GITHUB_TOKEN gh api graphql -f query='
 
 **受众策略（容易忽略）**：投票只有发在**自己拥有/维护的仓库**才合适；发到第三方仓库属于越界。若想让上游用户参与，正确做法是**在自己仓库开投票 + 在上游发 announcement 引流**，而不是把投票发到上游。
 
-**⚠️ 创建 Poll 是纯手工操作**：登录网页 → 该仓库 Discussions → 选 `Polls` 分类 → **New discussion** → 填 Poll question + 选项（≥2）→ 点 **Add an option** 加到所需数量（≤8）→ **Start poll**。因为 API 无法创建，这一步**必须请用户亲自操作**，不要承诺「我帮你建成」。
+### ⚠️ 已知限制：创建 Poll 必须由用户手工完成，不要尝试自动化
+
+**2026-09-17 实测：四条自动化路线全部受阻 —— 不要再走一遍，直接走下面的「正确做法」。**
+
+| 尝试 | 结果 |
+|---|---|
+| GraphQL API 创建 Poll | ❌ `CreateDiscussionInput` 无 poll 字段 |
+| Chrome 直接开调试端口（默认 profile） | ❌ Chrome 136+ 报 `DevTools remote debugging requires a non-default data directory` |
+| 复制最小 profile（`Local State` + `Network/Cookies`）给 playwright 用 | ❌ 登录态丢失、页面跳 `/login` —— Chrome 127+ 的 **App-Bound 加密**使 cookie 无法跨 profile 解密 |
+| robocopy 完整复制 profile 到非默认目录 | ❌ 体量过大，2 分钟超时 |
+| `computer-use` MCP 走浏览器自动化 | ❌ 本机启动失败（`tools/list: invalid request`） |
+
+**⇒ 正确做法（唯一可行）：给用户可直接粘贴的文案，请用户自己登录并提交。**
+
+1. **准备三段内容**：标题、正文、选项文案（每个 ≤8 个）—— 逐条给纯文本，方便逐项复制；
+2. **给出直达链接**：`https://github.com/<owner>/<repo>/discussions/new?category=polls`；
+3. **写清操作步骤**：选 `Polls` 分类 → 填 Poll question → 逐条填选项（点 **Add an option** 增加）→ **Start poll**；
+4. **用户提交后，自己用上面那段 GraphQL 读回结果作验证**（**读这一步能自动化，务必做**）。
+
+**⚠️ 不要承诺「我帮你建成」「我自动发」** —— 在当前 Chrome / GitHub 的安全策略下做不到，说了就是给用户一个必然失败的预期。
 
 ```bash
 unset GITHUB_TOKEN GH_TOKEN
