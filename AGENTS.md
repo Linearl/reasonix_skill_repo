@@ -77,7 +77,12 @@ markdown 渲染坏掉，且**长期没被发现**（直到 2026-09-16 比对时�
 
 - **禁止 `git add -A` / `git add .`** —— 只用**显式路径**；提交前 `git status --short` 核对暂存区；
 - 提交信息用**英文 + conventional 前缀**：`feat(skills):` / `fix(skill):` / `docs(skills):` / `chore:`；
-- 需要代理时：`https_proxy=http://127.0.0.1:10808 git push origin main`。
+- 需要代理时 —— **`http_proxy` 与 `https_proxy` 都要设**。
+  只设 `https_proxy` 实测会报 `schannel: failed to receive handshake, SSL/TLS connection failed`；
+  而直连 github.com 是 000（完全不通），所以代理是必需的。
+  ```bash
+  http_proxy=http://127.0.0.1:10808 https_proxy=http://127.0.0.1:10808 git push origin main
+  ```
 
 ---
 
