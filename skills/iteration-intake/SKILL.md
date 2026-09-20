@@ -27,7 +27,7 @@ runas: inline
 
 | # | 源 | 位置 | 判据 |
 |---|---|---|---|
-| 1 | **意见箱** | `%APPDATA%\reasonix\feedback-inbox\feedback-*.md` | 文件名**不含** `-已转入tasklist` 的即为未消纳；`analysis-*.md` 是产出不是输入 |
+| 1 | **意见箱** | `%APPDATA%\reasonix\feedback-inbox\feedback-*.md` | 主目录下的即为**未消纳**；**跳过 `archived/` 子目录**（已处理项都在里面）；`analysis-*.md` 是产出不是输入 |
 | 2 | **崩溃残留** | `%APPDATA%\reasonix\crash-pending\`、`crash-fatal\` | 目录内有新文件（非空）即报警；读里面的摘要/日志片段 |
 | 3 | **性能告警** | `%APPDATA%\reasonix\logs\desktop\desktop.log` | 全新 `perf monitor threshold`（metrics：workingSetMb / eventsMb / storeMb / v4OperationMb）——按 metric 聚成一条候选，别每 3 秒一条 |
 | 4 | **tasklist 状态** | `docs/tasklist/`（`python scripts/tasklist_db.py sql "..."`） | `watching` 到期该复看、`partial` 有剩余项、`blocked` 的外部条件可能已解 |
@@ -77,7 +77,7 @@ runas: inline
 | 无可执行价值 | 记「已拒绝 + 理由」（短，一行），避免下轮重复分析 |
 | 证据不足 | 立候选但标「证据不足」，写清还缺什么 |
 
-**源文件标记**：意见箱条目处理后在文件名后加 `-已转入tasklist`（沿用既有约定）；本轮不打算处理的不要改名。
+**源文件归档**：意见箱条目处理完后 `mv` 进 `feedback-inbox/archived/`（**目录即状态**；若文件名带旧 `-已转入tasklist` 后缀，一并去掉）；**未处理的留在主目录不动**。归档时在正文首行追加一行 `> 已转入任务 NNN · YYYY-MM-DD`，便于回查去重。
 
 **冷置**：候选池里超过 30 天仍未确认的条目 → 状态改「冷置」，并在后续巡检输出里折叠（不删除、不重复报告）。
 
