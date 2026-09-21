@@ -27,7 +27,7 @@
 | 11 | [reasonix-remote-linux-setup](skills/reasonix-remote-linux-setup/) | 在 Linux 远程主机（含绿联 NAS 等魔改系统）上部署 reasonix serve 并打通 Windows 桌面版远程连接 | 含全部已知坑（SSH/SFTP 虚拟视图等），基于绿联 DX4600PRO 实战验证 |
 | 12 | [reasonix-sync-deploy](skills/reasonix-sync-deploy/) | 新机器接入 reasonix-sync 多机同步体系：环境探测、OneDrive 始终保留提示、定时任务创建、首次推送验证 | 多机共用一套技能与记忆；需先有同步体系 |
 | 13 | [gh-issue-submit](skills/gh-issue-submit/) | 用 gh CLI 向任意 GitHub 仓库提交 issue：模板发现（分支差异）、查重、权限切换陷阱、提交与验证 | 自研（GitHub 工作流；依赖 gh CLI 登录态） |
-| 14 | [github-issue-triage](skills/github-issue-triage/) | 自己仓库的 issue 自动化闭环：收集→分析→修复→验证→关闭，关闭前证据硬门槛、先评论后关闭 | 自研（依赖 github-mcp-server 与 Issues 读写权限） |
+| 14 | [gh-issue-triage](skills/gh-issue-triage/) | 自己仓库的 issue 自动化闭环：收集→分析→修复→验证→关闭，关闭前证据硬门槛、先评论后关闭（2026-09-21 由 github-issue-triage 改名，与 gh-issue-submit 风格统一；fork 内置版同步更名） | 自研（依赖 github-mcp-server 与 Issues 读写权限） |
 | 15 | [html-deck-pipeline-skill](skills/html-deck-pipeline-skill/) | 端到端 HTML 讲稿流水线：网站骨架 + WYSIWYG 编辑器 + 4 主题 × 3 字号 + 一键导出 HTML/PPTX，分镜先行/风格契约/质量门 | 自研（2026-08-11 从 linearleaf_skill_repo 迁移） |
 | 16 | [invest_analysis](skills/invest_analysis/) | A股/港股系统化投资研究：赛道筛选、供应链验证、财报核验、研报交叉验证（附数据工具链） | 自研（2026-08-11 从 linearleaf_skill_repo 迁移；仅方法论，不构成投资建议） |
 | 17 | [code-audit-fix](skills/code-audit-fix/) | 全流程代码审计：缺陷扫描、分优先级批量修复、多轮交叉复核、CI 非交互执行与结果契约 | 自研（2026-08-11 从 linearleaf_skill_repo 迁移） |

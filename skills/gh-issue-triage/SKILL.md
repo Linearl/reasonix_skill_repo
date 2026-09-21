@@ -1,5 +1,5 @@
 ---
-name: github-issue-triage
+name: gh-issue-triage
 description: 自己的 GitHub 仓库 issue 自动化闭环：收集→分析→修复→验证→关闭，含关闭前证据硬门槛与安全护栏（依赖 github-mcp-server）
 ---
 
