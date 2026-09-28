@@ -60,6 +60,7 @@ runas: inline
 **等待子对话（2026-09-21 用户要求：禁止占位死等）**：
 - 需要「等这批子对话做完再继续」时，**不要用 bash sleep / 长 wait 占位**——死等固定时长不感知事件（实例：设 1200s，子对话 500s 已回，浪费 700s），且本环境 bash 后台 job 本就不可靠
 - **改用 `event_wait`（任务 228，待实施）**：设事件触发器（targets + mode=all_idle + timeout），条件满足即被唤醒继续；等待期间仍可收 steer、可被 stop
+- **⚠️ 2026-09-24 用户指令（event_wait 落地前的强制轮询律）**：主对话**不得停止等待子会话唤醒**——**每 5 分钟检查一次各在途线进展**（读状态文件+wt commits+session status），避免子会话异常后任务无法推进；检查时顺手收货已完成的线（§4b 活体巡检合并执行）。实现=turn 内 `sleep 300` 循环（steer 可在运行中即时插入，不堵用户），发现交付即处理；全部闭环后停
 - **过渡方案（工具落地前）**：短周期轮询——`sleep 60` + `get_session_status`（或读状态文件）重查，**每轮顺手收货已完成的线**——把死等变成轮询收货
 
 **「需立即拍板」标注标准（三条全满足才可标，防滥用）**：
@@ -100,6 +101,8 @@ runas: inline
 - `interrupted_turn pending` → **发一条消息续跑**（inbox 驱动打断 pending turn，实测 15s 苏醒）——常见于**出包 relaunch 窗口**打断派活 turn；
 - 决策框挂起 → 发**处置指令**（不重提交被禁 op + 跳过受限点先交付能交的 + 回报状态），冻结由用户在面板解；
 - mtime 长冻结且无回执 → 报告用户（考虑重建会话）。
+
+**⚠️ 重启更新（restart_update execute）被挡的判据（2026-09-25 用户定）**：`execute` 报「a turn is running or background jobs are active」时——**发起方自身 turn 不计入**（无鸡生蛋问题），挡道的是**另一个活跃对话**（协作子会话在跑 turn）或未清的 background job。处置：`wait` 清 job + 查活跃对话等其 idle，**不要**结束自己的 turn 来绕。build 自动铺 staging 后 active 先变、running 还是旧的=只差 relaunch；target 状态在 turn 边界被清（execute 前需重新 `set_target staging`）。
 
 **实证（2026-09-24）**：301/300 派活撞 1624 出包 relaunch → `interrupted_turn pending` → 唤醒消息续跑；另案开发-1「编辑被拒转用户决定」4.3 小时零交付（任务 225 同族）。
 **关联**：session-recovery-cleanup Phase 0 · 出包窗口避开派活 / relaunch 后必唤醒 · 任务 225（转用户决定决策框级联）。
