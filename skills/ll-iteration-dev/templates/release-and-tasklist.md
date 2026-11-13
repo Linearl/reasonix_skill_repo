@@ -50,7 +50,7 @@
 ## §5.7.3 回写 tasklist（脚本路径，禁手搬）
 
 ```bash
-cd docs/tasklist
+cd docs/reasonix/tasklist
 python scripts/tasklist_promote.py NNN --dry-run    # 先预览（仅 done 可迁）
 python scripts/tasklist_promote.py NNN              # 迁移：正文整块搬入已完成文件 + 待办侧留指针 + 总表三处同步
 python scripts/tasklist_promote.py --check          # 一致性体检

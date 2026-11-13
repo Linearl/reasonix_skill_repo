@@ -6,7 +6,7 @@
 ## 审计对象
 
 - 范围：`<基线 sha>` → `<终点 sha>`（N commit）
-- 验收锚点来源：`docs/tasklist/<领域文件>` 各任务正文
+- 验收锚点来源：`docs/reasonix/tasklist/<领域文件>` 各任务正文
 
 ## 分工表
 

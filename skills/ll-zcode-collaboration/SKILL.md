@@ -22,7 +22,7 @@ runas: inline
 - 确认 zcode 侧可达（留言板首条 INFO+用户转交或直派）
 
 ### 阶段 1：目标 → handoff
-- 用户目标 → Reasonix 写**自包含 handoff 文档** `docs/handoff/zcode-<主题>-<YYYYMMDD>.md`：任务分解（按域分组/依赖序）、每件验收标准（可证伪）、工作方式（worktree 隔离+junction node_modules+显式路径提交+预算棘轮 gzip+1.0/raw+10 one-shot）、禁区（不碰审计防线/他人条目）、交付格式（分支+报告 `docs/report/zcode交付/`+DONE 留言指针）
+- 用户目标 → Reasonix 写**自包含 handoff 文档** `docs/reasonix/handoff/zcode-<主题>-<YYYYMMDD>.md`：任务分解（按域分组/依赖序）、每件验收标准（可证伪）、工作方式（worktree 隔离+junction node_modules+显式路径提交+预算棘轮 gzip+1.0/raw+10 one-shot）、禁区（不碰审计防线/他人条目）、交付格式（分支+报告 `docs/reasonix/report/zcode交付/`+DONE 留言指针）
 - 留言板 DISPATCH 指针 → zcode
 
 ### 阶段 2：zcode 逐件开发（并行子代理）
@@ -47,7 +47,7 @@ runas: inline
 ### 阶段 6：验证+报告
 - **装机自验**（能自动的）：enroll 重跑回读断言、cache-guard 冷编译、止血件日志确认——**验证修复必须用修复后的构建**（旧包 CLI 验证新修复=无效验证，20261001 教训）
 - **需要人眼的**：截图找用户（布局/视觉类）
-- 撰写批次报告 `docs/report/`+总表回填+tasklist 回写（✅ 标记规范：✅ 在「任务」前+日期紧邻「完成」）
+- 撰写批次报告 `docs/reasonix/report/`+总表回填+tasklist 回写（✅ 标记规范：✅ 在「任务」前+日期紧邻「完成」）
 
 ### 阶段 7：清理收尾
 - 构建缓存：`go clean -cache`（月度/C 盘紧张时）
@@ -73,7 +73,7 @@ runas: inline
 - bus 上线后：bus=机器层实时通道，留言板=稳态+fallback（bus 故障降级写留言板）
 
 ## 首例（权威参考）
-- 夜间批 20261001：十五件零跳过（安全批 5+432+430+bus 系 5+425+420+421），全程留言板通信，报告 `docs/report/zcode交付/`
+- 夜间批 20261001：十五件零跳过（安全批 5+432+430+bus 系 5+425+420+421），全程留言板通信，报告 `docs/reasonix/report/zcode交付/`
 - 协议：`docs/collab/zcode/README.md` v1.1
 
 ## 使用中持续改进

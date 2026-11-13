@@ -76,7 +76,7 @@ description: 跨会话「对抗式」代码审计与修复流水线 —— 把�
 
 ## 与 Reasonix 具体设施的对接
 
-- **跨对话协作**：`talk_to_session` 派单/收货（子对话按 `reasonix-for-ai` 分组）；**文件留痕**用 `docs/report/`；
+- **跨对话协作**：`talk_to_session` 派单/收货（子对话按 `reasonix-for-ai` 分组）；**文件留痕**用 `docs/reasonix/report/`；
 - **并行度**：受本机并发限制时，分批派遣（每批 3-4 个），并监控限流；
 - **派单模板**：范围 + 角色（Finder/Reviewer）+ 硬规则（禁 grep、要读全文）+ 交付格式（逐条含 file:line）+ 明确"只读"；
 - **裁决留痕**：主对话的终审结论与被否条目都要落盘（后者防止下轮重复劳动）。

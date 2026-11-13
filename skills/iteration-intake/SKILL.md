@@ -16,7 +16,7 @@ runas: inline
 
 | 输出 | 位置 |
 |---|---|
-| 需求初稿条目（追加） | `docs/tasklist/16-需求候选池.md`（不存在则用第 3 步模板新建） |
+| 需求初稿条目（追加） | `docs/reasonix/tasklist/16-需求候选池.md`（不存在则用第 3 步模板新建） |
 | 收尾摘要（对话输出，一行） | 新增候选 N 条 / 滞留 M 条 / 异常项 |
 
 工具：写文件用 `write_file` / `edit_file`（**不要** PowerShell `Set-Content`，中文会坏）。
@@ -30,7 +30,7 @@ runas: inline
 | 1 | **意见箱** | `%APPDATA%\reasonix\feedback-inbox\feedback-*.md` | 主目录下的即为**未消纳**；**跳过 `archived/` 子目录**（已处理项都在里面）；`analysis-*.md` 是产出不是输入 |
 | 2 | **崩溃残留** | `%APPDATA%\reasonix\crash-pending\`、`crash-fatal\` | 目录内有新文件（非空）即报警；读里面的摘要/日志片段 |
 | 3 | **性能告警** | `%APPDATA%\reasonix\logs\desktop\desktop.log` | 全新 `perf monitor threshold`（metrics：workingSetMb / eventsMb / storeMb / v4OperationMb）——按 metric 聚成一条候选，别每 3 秒一条 |
-| 4 | **tasklist 状态** | `docs/tasklist/`（`python scripts/tasklist_db.py sql "..."`） | `watching` 到期该复看、`partial` 有剩余项、`blocked` 的外部条件可能已解 |
+| 4 | **tasklist 状态** | `docs/reasonix/tasklist/`（`python scripts/tasklist_db.py sql "..."`） | `watching` 到期该复看、`partial` 有剩余项、`blocked` 的外部条件可能已解 |
 | 5 | **上游动向** | `gh api` 查 esengine/DeepSeek-Reasonix 新 issue/PR | 涉及 fork 魔改面（classic 布局、协作工具、实验开关、v4 存储）才立候选；其余只记录不立项 |
 
 **扫法提示**：
@@ -88,7 +88,7 @@ runas: inline
 人工挑了要做的候选后，按此路径入库（**已由任务 195 全流程验证，无需新代码**）：
 
 ```bash
-cd docs/tasklist
+cd docs/reasonix/tasklist
 python scripts/next-task-id.py                 # 取号即占坑（防多会话撞号）
 # → 写正式正文到对应领域文件（保留候选池里的证据链 + 补 file:line 与可证伪验收）
 # → 01-总表.md 加登记行
@@ -128,5 +128,5 @@ git add <显式路径> && git commit -m "tl: ..."   # 内层仓库，禁止 add 
 
 - [[iteration-planning]]（阶段 2：排序与范围）｜ [[parallel-worktree-dev]]（阶段 3：执行与发版）
 - [[collect_issues]]（意见箱的既有专用技能；本技能覆盖更广，两者对源 1 的处理一致）
-- 候选池：`docs/tasklist/16-需求候选池.md`
+- 候选池：`docs/reasonix/tasklist/16-需求候选池.md`
 - 方案文档：`docs/自主迭代-执行层缺口分析与落地方案-20260920.md`

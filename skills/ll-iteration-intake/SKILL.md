@@ -17,7 +17,7 @@ runas: inline
 
 | 输出 | 位置 |
 |---|---|
-| 需求初稿条目（追加） | `docs/tasklist/16-需求候选池.md`（不存在则用第 3 步模板新建） |
+| 需求初稿条目（追加） | `docs/reasonix/tasklist/16-需求候选池.md`（不存在则用第 3 步模板新建） |
 | 意见箱深度分析（可选，用户点名时） | `feedback-inbox/analysis-YYYYMMDD.md` |
 | 收尾摘要（对话输出，一行） | 新增候选 N 条 / 滞留 M 条 / 异常项 |
 
@@ -32,7 +32,7 @@ runas: inline
 | 1 | **意见箱** | `%APPDATA%\reasonix\feedback-inbox\feedback-*.md` | 主目录下的即为**未消纳**；**跳过 `archived/` 子目录**（已处理项都在里面）；`analysis-*.md` 是产出不是输入。**机器草稿人审门（344-A）**：`origin: signal-scan` 且 `confirmed: false` 的草稿**不是输入**——不分析不立候选，只在收尾摘要记「待确认 N 条」；`confirmed: true` 的按普通候选处理 |
 | 2 | **崩溃残留** | `%APPDATA%\reasonix\crash-pending\`、`crash-fatal\` | **先跑 `python scripts/feedback_signal_scan.py`（任务 344-A，dry-run 默认）**——已知噪音（abnormal_exit.v2 lifecycle 残留、0 字节 fatal log、webview2 挂观察）由脚本白名单拦下，草稿产出与人审门也由脚本管；本技能**只消费其输出**（`--write` 后落进意见箱的 `origin: signal-scan` 草稿），不再自己扫目录下「新文件即报警」 |
 | 3 | **性能告警** | `%APPDATA%\reasonix\logs\desktop\desktop.log` | 全新 `perf monitor threshold`（metrics：workingSetMb / eventsMb / storeMb / v4OperationMb）——按 metric 聚成一条候选，别每 3 秒一条 |
-| 4 | **tasklist 状态** | `docs/tasklist/`（`python scripts/tl.py list --status watching partial blocked`；旧 `tasklist_db.py` 已废弃） | `watching` 到期该复看、`partial` 有剩余项、`blocked` 的外部条件可能已解 |
+| 4 | **tasklist 状态** | `docs/reasonix/tasklist/`（`python scripts/tl.py list --status watching partial blocked`；旧 `tasklist_db.py` 已废弃） | `watching` 到期该复看、`partial` 有剩余项、`blocked` 的外部条件可能已解 |
 | 5 | **上游动向** | `gh api` 查 esengine/DeepSeek-Reasonix 新 issue/PR | 涉及 fork 魔改面（classic 布局、协作工具、实验开关、v4 存储）才立候选；其余只记录不立项 |
 
 **扫法提示**：
@@ -118,7 +118,7 @@ runas: inline
 人工挑了要做的候选后，按此路径入库（**已由任务 195 全流程验证，无需新代码**）：
 
 ```bash
-cd docs/tasklist
+cd docs/reasonix/tasklist
 python scripts/tl.py next                      # 取号即占坑（防多会话撞号）
 # → 正式正文入库（保留候选池里的证据链 + 补 file:line 与可证伪验收）：
 python scripts/tl.py add "<标题>" --num N --domain "<领域>" --prio P<N>   # 用 next 占的号（--num 显式指定，避免与自动取号不一致；add 无 --body-file）
@@ -158,5 +158,5 @@ git add <显式路径> && git commit -m "tl: ..."   # 内层仓库，禁止 add 
 
 - [[ll-iteration-plan]]（阶段 2：排序与范围）｜ [[ll-iteration-dev]]（阶段 3：执行与发版，**依赖跨会话协作**）
 - [[collect_issues]]（意见箱的既有专用技能；本技能覆盖更广，两者对源 1 的处理一致）
-- 候选池：`docs/tasklist/16-需求候选池.md`
+- 候选池：`docs/reasonix/tasklist/16-需求候选池.md`
 - 方案文档：`docs/自主迭代-执行层缺口分析与落地方案-20260920.md`

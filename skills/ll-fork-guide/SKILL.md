@@ -42,7 +42,7 @@ description: DeepSeek-Reasonix fork 开发指南——fork 定位与上游协作
 - **版本号=`1.38.3-YYYYMMDD-HHMM`**（时间戳精确到分，长期停 1.38.3 靠时间戳区分包；不自增小版本号）。
 - **release notes 增量基线=上一时间戳包**（只写相对上一包新增，禁堆叠历史）；文件名与包版本同名。
 - **出包收尾三件套**：①产物落 `desktop/build/bin/` ②**铺 staging**（`%LOCALAPPDATA%\Programs\Reasonix\staging\` 四件套：reasonix-desktop.exe/reasonix-cli.exe/reasonix-update-helper.exe/version.txt）③台账+notes。**验证**=`cat staging/version.txt`==新版本号；切换成功痕迹=`versions/<旧>.replaced-<ts>/`。
-- 每次出包留档台账（`docs/handoff/fork开发-出包台账-*.md` 持续追加）。
+- 每次出包留档台账（`docs/reasonix/handoff/fork开发-出包台账-*.md` 持续追加）。
 
 ## 5. 构建与预算
 

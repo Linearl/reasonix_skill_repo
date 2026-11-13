@@ -19,7 +19,7 @@ runas: inline
 
 ## 1. 收集
 
-- 候选池 `docs/tasklist/16-需求候选池.md`：取「待确认 / 已确认」条目（跳过「证据不足」与「冷置」）
+- 候选池 `docs/reasonix/tasklist/16-需求候选池.md`：取「待确认 / 已确认」条目（跳过「证据不足」与「冷置」）
 - tasklist：`python scripts/tasklist_db.py sql "SELECT num,status,COALESCE(due_at,'-'),substr(title,1,50) FROM tasks WHERE status='pending'"`（别全文读 md）
 - **依赖**：目标任务的正文里若写明「前置」「排在 N 之后」，列出前置链（例：173/174/175 排在 162/166/167 之后）
 - **partial 分拣（2026-09-22 按总表四表更正）**：`partial` = **任务没做完、属待办侧**（总表「二、待办 — 部分完成」）→ **可以排进开发 Block**；其中剩余只是「装机验证/观察」的**只读验证并行跑，不占开发产能**。真正进「出包后验证组」的是表三 `done`（代码已交付、装机未闭环，向表四 `verified` 过渡）——**别把状态名用错，旧写法把 partial 当已交付是错的**
